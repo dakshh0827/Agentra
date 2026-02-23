@@ -29,9 +29,11 @@ const getAgents = asyncHandler(async (req, res) => {
   const { category, search, status, sortBy, page, limit, mine } = req.query
 
   const result = await agentService.getAgents({
-    category,
+    category: category === 'all' ? undefined : category,
     search,
-    status: status || 'active',
+    // Fix: Allow all agents unless specifically requesting a specific status.
+    // Removes the hardcoded 'active' default that hid the offline agents.
+    status: (!status || status === 'all') ? undefined : status, 
     sortBy: sortBy || 'score',
     page: parseInt(page) || 1,
     limit: Math.min(parseInt(limit) || 20, 100),

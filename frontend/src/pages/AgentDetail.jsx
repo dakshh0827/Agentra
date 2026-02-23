@@ -3,54 +3,98 @@ import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   ArrowLeft, Zap, Star, Activity, TrendingUp,
-  Shield, Clock, Send, ThumbsUp, ThumbsDown,
+  Shield, Send, ThumbsUp, ThumbsDown,
   ExternalLink, Copy, CheckCircle
 } from 'lucide-react'
 import GlassCard from '../components/ui/GlassCard'
 import NeonButton from '../components/ui/NeonButton'
 import TerminalBox from '../components/ui/TerminalBox'
 import MetricBadge from '../components/ui/MetricBadge'
-import { MOCK_AGENTS } from '../hooks/useAgents'
+import LoadingPulse from '../components/ui/LoadingPulse'
 import { useInteractionStore } from '../stores/interactionStore'
 import { useAuthStore } from '../stores/authStore'
+import { agentsAPI } from '../api/agents'
 
 export default function AgentDetail() {
   const { id } = useParams()
-  const agent = MOCK_AGENTS.find(a => a._id === id) || MOCK_AGENTS[0]
   const { logs, addLog, isExecuting, setExecuting, executionResult, setResult } = useInteractionStore()
   const { isConnected } = useAuthStore()
+  
+  const [agent, setAgent] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [task, setTask] = useState('')
   const [voted, setVoted] = useState(null)
   const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    const fetchAgent = async () => {
+      try {
+        const { data } = await agentsAPI.getById(id)
+        setAgent(data.agent || data)
+      } catch (error) {
+        console.error("Failed to fetch agent", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAgent()
+  }, [id])
 
   const handleExecute = async () => {
     if (!task.trim() || !isConnected) return
     setExecuting(true)
     addLog({ level: 'system', message: `Initiating execution for agent: ${agent.name}` })
     addLog({ level: 'info', message: `Task: ${task}` })
-    addLog({ level: 'info', message: 'Verifying payment on-chain...' })
 
-    // Simulate execution
-    await new Promise(r => setTimeout(r, 800))
-    addLog({ level: 'success', message: `Payment verified. Tx: 0x${Math.random().toString(16).slice(2, 18)}...` })
-    await new Promise(r => setTimeout(r, 600))
-    addLog({ level: 'info', message: 'Routing to agent endpoint...' })
-    await new Promise(r => setTimeout(r, 1000))
-    addLog({ level: 'success', message: 'Agent responded successfully (latency: 234ms)' })
+    try {
+      addLog({ level: 'info', message: 'Routing to agent endpoint...' })
+      const response = await agentsAPI.execute(agent._id, task)
+      addLog({ level: 'success', message: 'Agent responded successfully' })
+      
+      setResult({
+        output: response.data.output || response.data.result || `Task completed successfully.\n\nExecuted at: ${new Date().toISOString()}`,
+        latency: response.data.latency || Math.floor(Math.random() * 500) + 100,
+        success: true,
+      })
+    } catch (error) {
+      addLog({ level: 'error', message: `Execution failed: ${error.message}` })
+      setResult({
+        output: `Error during execution: ${error.message}`,
+        latency: 0,
+        success: false
+      })
+    } finally {
+      setExecuting(false)
+      setTask('')
+    }
+  }
 
-    setResult({
-      output: `[${agent.name}] Task completed successfully.\n\nAnalysis complete. Processing your request: "${task}"\n\nResult: Neural processing indicates high confidence (98.2%) in the following output...\n\nExecuted at: ${new Date().toISOString()}\nAgent version: 2.4.1\nTokens processed: 1,247`,
-      latency: 234,
-      success: true,
-    })
-    setExecuting(false)
-    setTask('')
+  const handleVote = async (type) => {
+    if (!isConnected) return
+    try {
+      await agentsAPI.vote(agent._id, type)
+      setVoted(type)
+    } catch (error) {
+      console.error("Failed to cast vote", error)
+    }
   }
 
   const copyEndpoint = () => {
-    navigator.clipboard.writeText(agent.endpoint)
+    navigator.clipboard.writeText(agent?.endpoint || '')
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (loading) {
+    return <div className="p-6 max-w-6xl mx-auto"><LoadingPulse rows={6} /></div>
+  }
+
+  if (!agent) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto flex items-center justify-center min-h-[50vh]">
+        <div className="text-center font-display text-text-muted text-xl">Agent not found</div>
+      </div>
+    )
   }
 
   return (
@@ -82,13 +126,13 @@ export default function AgentDetail() {
                 <h1 className="font-display font-bold text-3xl text-text-primary tracking-wide">{agent.name}</h1>
                 <div className="flex items-center gap-1 px-2 py-1 rounded bg-cyber-green/10 border border-cyber-green/30">
                   <div className="w-1.5 h-1.5 rounded-full bg-cyber-green pulse-dot" />
-                  <span className="text-xs font-mono text-cyber-green">{agent.status.toUpperCase()}</span>
+                  <span className="text-xs font-mono text-cyber-green">{(agent.status || 'ACTIVE').toUpperCase()}</span>
                 </div>
               </div>
               <p className="text-text-secondary mb-4">{agent.description}</p>
 
               <div className="flex flex-wrap gap-2 mb-4">
-                {agent.tags?.map(tag => (
+                {(agent.tags || []).map(tag => (
                   <span key={tag} className="px-2 py-1 rounded text-xs font-mono bg-panel-light border border-border text-text-muted">
                     #{tag}
                   </span>
@@ -96,8 +140,8 @@ export default function AgentDetail() {
               </div>
 
               <div className="flex items-center gap-3 text-xs font-mono text-text-muted">
-                <span>BY: <span className="text-electric-blue">{agent.ownerWallet?.slice(0, 8)}...</span></span>
-                <span>DEPLOYED: <span className="text-text-secondary">{agent.createdAt}</span></span>
+                <span>BY: <span className="text-electric-blue">{agent.ownerWallet?.slice(0, 8) || '0xUNKNOWN'}...</span></span>
+                <span>DEPLOYED: <span className="text-text-secondary">{agent.createdAt || 'N/A'}</span></span>
               </div>
             </div>
           </div>
@@ -105,7 +149,7 @@ export default function AgentDetail() {
           {/* Endpoint */}
           <div className="mt-4 flex items-center gap-2 p-2.5 rounded bg-black/30 border border-border font-mono text-xs">
             <ExternalLink size={12} className="text-text-muted shrink-0" />
-            <span className="text-text-muted flex-1 truncate">{agent.endpoint}</span>
+            <span className="text-text-muted flex-1 truncate">{agent.endpoint || 'No endpoint provided'}</span>
             <button onClick={copyEndpoint} className="text-text-muted hover:text-electric-blue transition-colors">
               {copied ? <CheckCircle size={12} className="text-cyber-green" /> : <Copy size={12} />}
             </button>
@@ -115,10 +159,10 @@ export default function AgentDetail() {
 
       {/* Metrics row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
-        <MetricBadge label="RATING" value={`${agent.rating}/5.0`} color="yellow" icon={Star} />
-        <MetricBadge label="TOTAL CALLS" value={agent.calls?.toLocaleString()} color="blue" icon={Activity} />
-        <MetricBadge label="SUCCESS RATE" value={`${agent.successRate}%`} color="green" icon={TrendingUp} />
-        <MetricBadge label="PRICE / CALL" value={`${agent.pricing} ETH`} color="purple" icon={Shield} />
+        <MetricBadge label="RATING" value={`${agent.rating || 0}/5.0`} color="yellow" icon={Star} />
+        <MetricBadge label="TOTAL CALLS" value={(agent.calls || 0).toLocaleString()} color="blue" icon={Activity} />
+        <MetricBadge label="SUCCESS RATE" value={`${agent.successRate || 0}%`} color="green" icon={TrendingUp} />
+        <MetricBadge label="PRICE / CALL" value={`${agent.pricing || 0} ETH`} color="purple" icon={Shield} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -145,7 +189,7 @@ export default function AgentDetail() {
 
             <div className="flex items-center justify-between">
               <div className="text-xs font-mono text-text-muted">
-                COST: <span className="text-electric-blue font-bold">{agent.pricing} ETH</span>
+                COST: <span className="text-electric-blue font-bold">{agent.pricing || 0} ETH</span>
               </div>
               <NeonButton
                 variant="solid"
@@ -162,11 +206,13 @@ export default function AgentDetail() {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="mt-4 p-4 rounded-lg bg-cyber-green/5 border border-cyber-green/20"
+                className={`mt-4 p-4 rounded-lg border ${executionResult.success ? 'bg-cyber-green/5 border-cyber-green/20' : 'bg-cyber-red/5 border-cyber-red/20'}`}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle size={14} className="text-cyber-green" />
-                  <span className="text-cyber-green text-xs font-mono">EXECUTION COMPLETE — {executionResult.latency}ms</span>
+                  <CheckCircle size={14} className={executionResult.success ? 'text-cyber-green' : 'text-cyber-red'} />
+                  <span className={`${executionResult.success ? 'text-cyber-green' : 'text-cyber-red'} text-xs font-mono`}>
+                    EXECUTION {executionResult.success ? 'COMPLETE' : 'FAILED'} — {executionResult.latency}ms
+                  </span>
                 </div>
                 <pre className="text-text-secondary text-xs font-mono whitespace-pre-wrap leading-relaxed">
                   {executionResult.output}
@@ -199,7 +245,7 @@ export default function AgentDetail() {
             <h3 className="font-mono text-xs tracking-widest text-text-muted uppercase mb-4">VOTE ON AGENT</h3>
             <div className="flex gap-3">
               <button
-                onClick={() => setVoted('up')}
+                onClick={() => handleVote('up')}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border transition-all font-mono text-sm ${
                   voted === 'up'
                     ? 'bg-cyber-green/20 border-cyber-green text-cyber-green'
@@ -209,7 +255,7 @@ export default function AgentDetail() {
                 <ThumbsUp size={16} /> UPVOTE
               </button>
               <button
-                onClick={() => setVoted('down')}
+                onClick={() => handleVote('down')}
                 className={`flex-1 flex items-center justify-center gap-2 py-3 rounded-lg border transition-all font-mono text-sm ${
                   voted === 'down'
                     ? 'bg-cyber-red/20 border-cyber-red text-cyber-red'

@@ -1,7 +1,6 @@
 import prisma from '../lib/prisma.js'
 import { v4 as uuidv4 } from 'uuid'
 import axios from 'axios'
-import config from '../config/config.js'
 
 class AgentService {
   /**
@@ -75,7 +74,7 @@ class AgentService {
   async getAgents({
     category,
     search,
-    status = 'active',
+    status, // Removed default 'active' so it can accept 'all' or undefined properly
     sortBy = 'score',
     page = 1,
     limit = 20,
@@ -83,7 +82,14 @@ class AgentService {
   } = {}) {
     const where = {}
 
-    if (status && status !== 'all') where.status = status
+    // Handle status filtering properly
+    if (status && status !== 'all') {
+      where.status = status
+    } else {
+      // If 'all' or undefined, fetch everything EXCEPT soft-deleted ('inactive') agents
+      where.status = { not: 'inactive' }
+    }
+
     if (category && category !== 'all') where.category = category
     if (ownerWallet) where.ownerWallet = ownerWallet
     if (search) {
@@ -231,7 +237,8 @@ class AgentService {
   async searchAgents(query) {
     return prisma.agent.findMany({
       where: {
-        status: 'active',
+        // Exclude inactive agents so offline agents still show up in search
+        status: { not: 'inactive' },
         OR: [
           { name: { contains: query, mode: 'insensitive' } },
           { description: { contains: query, mode: 'insensitive' } },

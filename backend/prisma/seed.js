@@ -1,4 +1,5 @@
-const { PrismaClient, AgentCategory, AgentStatus } = require('@prisma/client')
+import { PrismaClient, AgentCategory, AgentStatus } from '@prisma/client'
+
 const prisma = new PrismaClient()
 
 const SEED_WALLETS = [
@@ -109,7 +110,6 @@ const SEED_AGENTS = [
 async function main() {
   console.log('🌱 Seeding database...')
 
-  // Create users
   for (const wallet of SEED_WALLETS) {
     await prisma.user.upsert({
       where: { walletAddress: wallet },
@@ -119,7 +119,6 @@ async function main() {
     console.log(`  ✅ User: ${wallet.slice(0, 10)}...`)
   }
 
-  // Create agents
   for (const agentData of SEED_AGENTS) {
     const agent = await prisma.agent.upsert({
       where: { name: agentData.name },
@@ -127,7 +126,6 @@ async function main() {
       create: agentData,
     })
 
-    // Create usage metrics
     await prisma.usageMetrics.upsert({
       where: { agentId: agent.id },
       update: {
@@ -144,10 +142,10 @@ async function main() {
         avgLatency: Math.floor(Math.random() * 300 + 100),
       },
     })
+
     console.log(`  ✅ Agent: ${agent.name}`)
   }
 
-  // Global stats
   await prisma.globalStats.upsert({
     where: { id: 'global' },
     update: {
@@ -169,5 +167,10 @@ async function main() {
 }
 
 main()
-  .catch(err => { console.error(err); process.exit(1) })
-  .finally(() => prisma.$disconnect())
+  .catch(err => {
+    console.error(err)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

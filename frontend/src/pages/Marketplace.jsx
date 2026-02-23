@@ -1,12 +1,13 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Search, Filter, SlidersHorizontal, Zap, Globe, RefreshCw } from 'lucide-react'
+import { Search, SlidersHorizontal, Zap, Globe, RefreshCw } from 'lucide-react'
 import AgentCard from '../components/ui/AgentCard'
 import GlassCard from '../components/ui/GlassCard'
 import NeonButton from '../components/ui/NeonButton'
 import LoadingPulse from '../components/ui/LoadingPulse'
-import { useAgents, MOCK_AGENTS } from '../hooks/useAgents'
+import { useAgents } from '../hooks/useAgents'
 import { useMarketplaceStore } from '../stores/marketplaceStore'
+import { analyticsAPI } from '../api/analytics'
 
 const CATEGORIES = ['all', 'Analysis', 'Development', 'Security', 'Data', 'NLP', 'Web3']
 const SORT_OPTIONS = ['rating', 'calls', 'price-low', 'price-high', 'newest']
@@ -15,35 +16,37 @@ export default function Marketplace() {
   const { agents, isLoading } = useAgents()
   const { filters, search, setFilter, setSearch } = useMarketplaceStore()
   const [showFilters, setShowFilters] = useState(false)
+  const [stats, setStats] = useState(null)
 
-  // 1. Safely handle the agents array to prevent undefined errors
-  const safeAgents = Array.isArray(agents) ? agents : []
-  const safeMockAgents = Array.isArray(MOCK_AGENTS) ? MOCK_AGENTS : []
-  
-  // Use mock data as fallback if the fetched agents array is empty
-  const displayAgents = safeAgents.length > 0 ? safeAgents : safeMockAgents
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const { data } = await analyticsAPI.getGlobalStats()
+        setStats(data)
+      } catch (error) {
+        console.error("Failed to fetch global stats", error)
+      }
+    }
+    fetchStats()
+  }, [])
 
-  // 2. Safely filter and sort the display array
+  const displayAgents = Array.isArray(agents) ? agents : []
+
   const filteredAgents = displayAgents.filter(a => {
-    // Fallback to empty strings/arrays in case agent data is malformed
-    const agentName = a?.name || ''
-    const agentDesc = a?.description || ''
-    const agentTags = Array.isArray(a?.tags) ? a.tags : []
-    
     const matchSearch = !search || 
-      agentName.toLowerCase().includes(search.toLowerCase()) ||
-      agentDesc.toLowerCase().includes(search.toLowerCase()) ||
-      agentTags.some(t => t.toLowerCase().includes(search.toLowerCase()))
+      a.name?.toLowerCase().includes(search.toLowerCase()) ||
+      a.description?.toLowerCase().includes(search.toLowerCase()) ||
+      (a.tags || []).some(t => t.toLowerCase().includes(search.toLowerCase()))
       
-    const matchCat = filters?.category === 'all' || a?.category === filters?.category
+    const matchCat = filters.category === 'all' || a.category === filters.category
     
     return matchSearch && matchCat
   }).sort((a, b) => {
-    if (filters?.sortBy === 'rating') return (b?.rating || 0) - (a?.rating || 0)
-    if (filters?.sortBy === 'calls') return (b?.calls || 0) - (a?.calls || 0)
-    if (filters?.sortBy === 'price-low') return (a?.pricing || 0) - (b?.pricing || 0)
-    if (filters?.sortBy === 'price-high') return (b?.pricing || 0) - (a?.pricing || 0)
-    return 0
+    if (filters.sortBy === 'rating') return (b.rating || 0) - (a.rating || 0)
+    if (filters.sortBy === 'calls') return (b.calls || 0) - (a.calls || 0)
+    if (filters.sortBy === 'price-low') return (a.pricing || 0) - (b.pricing || 0)
+    if (filters.sortBy === 'price-high') return (b.pricing || 0) - (a.pricing || 0)
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0) // Newest
   })
 
   return (
@@ -74,10 +77,10 @@ export default function Marketplace() {
         className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"
       >
         {[
-          { label: 'TOTAL AGENTS', value: '247', color: 'text-electric-blue' },
-          { label: 'ACTIVE NOW', value: '183', color: 'text-cyber-green' },
-          { label: 'CALLS TODAY', value: '84.2K', color: 'text-neon-purple' },
-          { label: 'VOLUME ETH', value: '1,284', color: 'text-cyber-yellow' },
+          { label: 'TOTAL AGENTS', value: stats?.totalAgents || displayAgents.length, color: 'text-electric-blue' },
+          { label: 'ACTIVE NOW', value: stats?.activeAgents || '0', color: 'text-cyber-green' },
+          { label: 'CALLS TODAY', value: stats?.totalCalls || '0', color: 'text-neon-purple' },
+          { label: 'VOLUME ETH', value: stats?.volumeEth || '0', color: 'text-cyber-yellow' },
         ].map(stat => (
           <GlassCard key={stat.label} className="p-3 text-center" hover={false}>
             <div className={`font-mono font-bold text-xl ${stat.color}`}>{stat.value}</div>
@@ -111,7 +114,7 @@ export default function Marketplace() {
           >
             FILTERS
           </NeonButton>
-          <NeonButton variant="ghost" icon={RefreshCw}>
+          <NeonButton variant="ghost" icon={RefreshCw} onClick={() => window.location.reload()}>
           </NeonButton>
         </div>
 

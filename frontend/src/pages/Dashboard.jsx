@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -7,33 +7,9 @@ import {
 import { BarChart3, TrendingUp, Zap, DollarSign, Activity, ArrowUpRight } from 'lucide-react'
 import GlassCard from '../components/ui/GlassCard'
 import MetricBadge from '../components/ui/MetricBadge'
-
-const revenueData = [
-  { day: 'Mon', eth: 1.2, calls: 420 },
-  { day: 'Tue', eth: 2.1, calls: 680 },
-  { day: 'Wed', eth: 1.8, calls: 550 },
-  { day: 'Thu', eth: 3.4, calls: 1100 },
-  { day: 'Fri', eth: 2.9, calls: 930 },
-  { day: 'Sat', eth: 4.1, calls: 1320 },
-  { day: 'Sun', eth: 3.7, calls: 1190 },
-]
-
-const agentPerf = [
-  { name: 'DataSynth', calls: 1200, revenue: 60 },
-  { name: 'CodeForge', calls: 2300, revenue: 184 },
-  { name: 'NeuralVault', calls: 560, revenue: 67 },
-  { name: 'OracleStream', calls: 4300, revenue: 129 },
-  { name: 'SynthLang', calls: 1900, revenue: 76 },
-]
-
-const activityFeed = [
-  { type: 'call', text: 'Agent CodeForge-X executed', time: '2m ago', color: 'text-electric-blue' },
-  { type: 'vote', text: 'NeuralVault received 5★ review', time: '5m ago', color: 'text-cyber-yellow' },
-  { type: 'revenue', text: '0.08 ETH earned from DataSynth', time: '11m ago', color: 'text-cyber-green' },
-  { type: 'deploy', text: 'New agent version deployed', time: '23m ago', color: 'text-neon-purple' },
-  { type: 'call', text: 'Agent-to-agent call: DataSynth → OracleStream', time: '31m ago', color: 'text-electric-blue' },
-  { type: 'revenue', text: '0.15 ETH earned from ChainMind', time: '45m ago', color: 'text-cyber-green' },
-]
+import LoadingPulse from '../components/ui/LoadingPulse'
+import { analyticsAPI } from '../api/analytics'
+import { useAuthStore } from '../stores/authStore'
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null
@@ -48,6 +24,57 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Dashboard() {
+  const { walletAddress } = useAuthStore()
+  const [loading, setLoading] = useState(true)
+  const [data, setData] = useState({
+    metrics: null,
+    revenueData: [],
+    agentPerf: [],
+    activityFeed: []
+  })
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      if (!walletAddress) {
+        setLoading(false)
+        return
+      }
+      try {
+        setLoading(true)
+        const response = await analyticsAPI.getDashboard(walletAddress)
+        setData(response.data)
+      } catch (error) {
+        console.error("Failed to fetch dashboard", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchDashboard()
+  }, [walletAddress])
+
+  if (loading) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto">
+        <LoadingPulse rows={6} />
+      </div>
+    )
+  }
+
+  if (!walletAddress) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <Zap size={48} className="text-electric-blue mb-4 opacity-50 animate-pulse" />
+        <h2 className="text-2xl font-display font-bold text-text-primary mb-2">Connect Wallet</h2>
+        <p className="text-text-secondary">Please connect your wallet to view your dashboard analytics.</p>
+      </div>
+    )
+  }
+
+  const metrics = data.metrics || {}
+  const revenueData = data.revenueData || []
+  const agentPerf = data.agentPerf || []
+  const activityFeed = data.activityFeed || []
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Header */}
@@ -64,10 +91,10 @@ export default function Dashboard() {
       {/* Metrics row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
         {[
-          { label: 'TOTAL REVENUE', value: '19.2 ETH', color: 'green', icon: DollarSign, sublabel: '+32% this week' },
-          { label: 'TOTAL CALLS', value: '118,231', color: 'blue', icon: Activity, sublabel: '+18% this week' },
-          { label: 'MY AGENTS', value: '6', color: 'purple', icon: Zap, sublabel: '5 active' },
-          { label: 'SUCCESS RATE', value: '98.4%', color: 'yellow', icon: TrendingUp, sublabel: 'All agents' },
+          { label: 'TOTAL REVENUE', value: `${metrics.totalRevenue || 0} ETH`, color: 'green', icon: DollarSign, sublabel: '+32% this week' },
+          { label: 'TOTAL CALLS', value: (metrics.totalCalls || 0).toLocaleString(), color: 'blue', icon: Activity, sublabel: '+18% this week' },
+          { label: 'MY AGENTS', value: metrics.agentsCount || 0, color: 'purple', icon: Zap, sublabel: `${metrics.activeAgentsCount || 0} active` },
+          { label: 'SUCCESS RATE', value: `${metrics.successRate || 0}%`, color: 'yellow', icon: TrendingUp, sublabel: 'All agents' },
         ].map(m => (
           <motion.div
             key={m.label}
@@ -91,28 +118,34 @@ export default function Dashboard() {
               <span>+32%</span>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={revenueData}>
-              <defs>
-                <linearGradient id="ethGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#00a8ff" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#00a8ff" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,32,64,0.8)" />
-              <XAxis dataKey="day" stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
-              <YAxis stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Area type="monotone" dataKey="eth" stroke="#00a8ff" strokeWidth={2} fill="url(#ethGrad)" name="ETH" />
-            </AreaChart>
-          </ResponsiveContainer>
+          {revenueData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={revenueData}>
+                <defs>
+                  <linearGradient id="ethGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#00a8ff" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#00a8ff" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,32,64,0.8)" />
+                <XAxis dataKey="day" stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
+                <YAxis stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
+                <Tooltip content={<CustomTooltip />} />
+                <Area type="monotone" dataKey="eth" stroke="#00a8ff" strokeWidth={2} fill="url(#ethGrad)" name="ETH" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex items-center justify-center h-[200px] text-text-muted font-mono text-sm">
+              No revenue data available
+            </div>
+          )}
         </GlassCard>
 
         {/* Activity feed */}
         <GlassCard className="p-5" hover={false}>
           <h3 className="font-display font-bold text-text-primary mb-4">Activity Feed</h3>
           <div className="space-y-3 overflow-y-auto max-h-52">
-            {activityFeed.map((item, i) => (
+            {activityFeed.length > 0 ? activityFeed.map((item, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, x: 20 }}
@@ -120,13 +153,15 @@ export default function Dashboard() {
                 transition={{ delay: i * 0.05 }}
                 className="flex items-start gap-2 pb-3 border-b border-border last:border-0"
               >
-                <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${item.color.replace('text-', 'bg-')}`} />
+                <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${item.color?.replace('text-', 'bg-') || 'bg-electric-blue'}`} />
                 <div>
-                  <div className={`text-xs ${item.color}`}>{item.text}</div>
+                  <div className={`text-xs ${item.color || 'text-electric-blue'}`}>{item.text}</div>
                   <div className="text-text-muted text-[10px] font-mono mt-0.5">{item.time}</div>
                 </div>
               </motion.div>
-            ))}
+            )) : (
+              <div className="text-text-muted text-sm font-mono text-center py-4">No recent activity</div>
+            )}
           </div>
         </GlassCard>
       </div>
@@ -134,16 +169,22 @@ export default function Dashboard() {
       {/* Agent performance */}
       <GlassCard className="p-5" hover={false}>
         <h3 className="font-display font-bold text-text-primary mb-5">Agent Performance</h3>
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={agentPerf} barGap={4}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,32,64,0.8)" vertical={false} />
-            <XAxis dataKey="name" stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
-            <YAxis stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="calls" fill="rgba(0,168,255,0.5)" stroke="#00a8ff" strokeWidth={1} radius={[4, 4, 0, 0]} name="Calls" />
-            <Bar dataKey="revenue" fill="rgba(0,255,136,0.4)" stroke="#00ff88" strokeWidth={1} radius={[4, 4, 0, 0]} name="Revenue" />
-          </BarChart>
-        </ResponsiveContainer>
+        {agentPerf.length > 0 ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={agentPerf} barGap={4}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(15,32,64,0.8)" vertical={false} />
+              <XAxis dataKey="name" stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
+              <YAxis stroke="#3a5a7a" tick={{ fontSize: 11, fontFamily: 'Share Tech Mono' }} />
+              <Tooltip content={<CustomTooltip />} />
+              <Bar dataKey="calls" fill="rgba(0,168,255,0.5)" stroke="#00a8ff" strokeWidth={1} radius={[4, 4, 0, 0]} name="Calls" />
+              <Bar dataKey="revenue" fill="rgba(0,255,136,0.4)" stroke="#00ff88" strokeWidth={1} radius={[4, 4, 0, 0]} name="Revenue" />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-[200px] text-text-muted font-mono text-sm">
+            No performance data available
+          </div>
+        )}
       </GlassCard>
     </div>
   )

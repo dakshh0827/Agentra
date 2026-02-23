@@ -73,7 +73,7 @@ model User {
 model Agent {
   id            String        @id @default(auto()) @map("_id") @db.ObjectId
   agentId       String        @unique @default(cuid())
-  name          String
+  name          String        @unique
   ownerWallet   String
   description   String?
   endpoint      String

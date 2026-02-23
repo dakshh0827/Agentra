@@ -1,15 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Trophy, Star, Activity, TrendingUp, Zap, Crown, Medal } from 'lucide-react'
+import { Trophy, Star, Zap, Crown, Medal } from 'lucide-react'
 import GlassCard from '../components/ui/GlassCard'
-import { MOCK_AGENTS } from '../hooks/useAgents'
-
-const ranked = [...MOCK_AGENTS]
-  .map(a => ({
-    ...a,
-    score: (0.4 * a.rating * 20 + 0.3 * (a.calls / 500) + 0.2 * a.revenue / 10 + 0.1 * a.successRate).toFixed(1),
-  }))
-  .sort((a, b) => b.score - a.score)
+import LoadingPulse from '../components/ui/LoadingPulse'
+import { analyticsAPI } from '../api/analytics'
 
 const rankIcon = (i) => {
   if (i === 0) return <Crown size={18} className="text-cyber-yellow" />
@@ -27,6 +21,31 @@ const rankGlow = (i) => {
 
 export default function Leaderboard() {
   const [hovered, setHovered] = useState(null)
+  const [ranked, setRanked] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchLeaderboard = async () => {
+      try {
+        const { data } = await analyticsAPI.getLeaderboard()
+        // Compute score on frontend if backend doesn't provide it directly
+        const agentsWithScores = (data.leaderboard || data).map(a => ({
+          ...a,
+          score: a.score || (0.4 * (a.rating || 0) * 20 + 0.3 * ((a.calls || 0) / 500) + 0.2 * (a.revenue || 0) / 10 + 0.1 * (a.successRate || 0)).toFixed(1),
+        })).sort((a, b) => b.score - a.score)
+        setRanked(agentsWithScores)
+      } catch (error) {
+        console.error("Failed to fetch leaderboard", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchLeaderboard()
+  }, [])
+
+  if (loading) {
+    return <div className="p-6 max-w-5xl mx-auto"><LoadingPulse rows={6} /></div>
+  }
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -45,35 +64,36 @@ export default function Leaderboard() {
       </motion.div>
 
       {/* Top 3 podium */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        {ranked.slice(0, 3).map((agent, i) => {
-          const podiumOrder = [1, 0, 2] // center is 1st
-          const displayIdx = podiumOrder.indexOf(i)
-          const heights = ['h-36', 'h-44', 'h-28']
-          return (
-            <motion.div
-              key={agent._id}
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: displayIdx * 0.1 }}
-              className={`order-${i === 0 ? 2 : i === 1 ? 1 : 3}`}
-            >
-              <GlassCard
-                className={`p-4 text-center border ${rankGlow(i === 0 ? 0 : i === 1 ? 1 : 2)}`}
-                glowColor={i === 0 ? 'green' : 'blue'}
+      {ranked.length >= 3 && (
+        <div className="grid grid-cols-3 gap-4 mb-8">
+          {ranked.slice(0, 3).map((agent, i) => {
+            const podiumOrder = [1, 0, 2] // center is 1st
+            const displayIdx = podiumOrder.indexOf(i)
+            return (
+              <motion.div
+                key={agent._id}
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: displayIdx * 0.1 }}
+                className={`order-${i === 0 ? 2 : i === 1 ? 1 : 3}`}
               >
-                <div className="flex justify-center mb-2">{rankIcon(i)}</div>
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-electric-blue/20 to-neon-purple/20 border border-electric-blue/30 flex items-center justify-center mx-auto mb-2">
-                  <Zap size={20} className="text-electric-blue" />
-                </div>
-                <div className="font-display font-bold text-text-primary text-sm mb-1">{agent.name}</div>
-                <div className="font-mono text-2xl font-bold gradient-text">{agent.score}</div>
-                <div className="text-text-muted text-[10px] font-mono mt-1">NEURAL SCORE</div>
-              </GlassCard>
-            </motion.div>
-          )
-        })}
-      </div>
+                <GlassCard
+                  className={`p-4 text-center border ${rankGlow(i === 0 ? 0 : i === 1 ? 1 : 2)}`}
+                  glowColor={i === 0 ? 'green' : 'blue'}
+                >
+                  <div className="flex justify-center mb-2">{rankIcon(i)}</div>
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-electric-blue/20 to-neon-purple/20 border border-electric-blue/30 flex items-center justify-center mx-auto mb-2">
+                    <Zap size={20} className="text-electric-blue" />
+                  </div>
+                  <div className="font-display font-bold text-text-primary text-sm mb-1">{agent.name}</div>
+                  <div className="font-mono text-2xl font-bold gradient-text">{agent.score}</div>
+                  <div className="text-text-muted text-[10px] font-mono mt-1">NEURAL SCORE</div>
+                </GlassCard>
+              </motion.div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Full ranking table */}
       <GlassCard className="overflow-hidden" hover={false}>
@@ -118,7 +138,7 @@ export default function Leaderboard() {
               </div>
               <div>
                 <div className="font-display font-bold text-text-primary text-sm">{agent.name}</div>
-                <div className="text-text-muted text-xs font-mono">{agent.category}</div>
+                <div className="text-text-muted text-xs font-mono">{agent.category || 'N/A'}</div>
               </div>
             </div>
 
@@ -129,7 +149,7 @@ export default function Leaderboard() {
                 <div className="h-1 w-16 bg-panel-light rounded-full mt-1 overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${(agent.score / 100) * 100}%` }}
+                    animate={{ width: `${Math.min((agent.score / 100) * 100, 100)}%` }}
                     transition={{ delay: 0.5 + i * 0.05, duration: 0.8 }}
                     className="h-full bg-gradient-to-r from-electric-blue to-neon-purple rounded-full"
                   />
@@ -140,20 +160,25 @@ export default function Leaderboard() {
             {/* Rating */}
             <div className="col-span-2 flex items-center gap-1">
               <Star size={12} className="text-cyber-yellow" fill="#ffcc00" />
-              <span className="font-mono text-sm text-text-primary">{agent.rating}</span>
+              <span className="font-mono text-sm text-text-primary">{agent.rating || 0}</span>
             </div>
 
             {/* Calls */}
             <div className="col-span-2 flex items-center">
-              <span className="font-mono text-sm text-electric-blue">{(agent.calls / 1000).toFixed(1)}K</span>
+              <span className="font-mono text-sm text-electric-blue">{((agent.calls || 0) / 1000).toFixed(1)}K</span>
             </div>
 
             {/* Success */}
             <div className="col-span-1 flex items-center">
-              <span className="font-mono text-sm text-cyber-green">{agent.successRate}%</span>
+              <span className="font-mono text-sm text-cyber-green">{agent.successRate || 0}%</span>
             </div>
           </motion.div>
         ))}
+        {ranked.length === 0 && (
+          <div className="text-center py-10 text-text-muted font-mono">
+            No agents ranked yet.
+          </div>
+        )}
       </GlassCard>
     </div>
   )

@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Upload, ChevronRight, Check, Code, Globe, Tag, DollarSign, Zap } from 'lucide-react'
+import { Upload, ChevronRight, Check, Globe, Tag, DollarSign, Zap } from 'lucide-react'
 import GlassCard from '../components/ui/GlassCard'
 import NeonButton from '../components/ui/NeonButton'
 import { agentsAPI } from '../api/agents'
@@ -16,11 +16,35 @@ const STEPS = [
 
 const CATEGORIES = ['Analysis', 'Development', 'Security', 'Data', 'NLP', 'Web3', 'Other']
 
+// ✅ Moved outside DeployStudio so it's not recreated on every render
+const InputField = ({ label, field, type = 'text', placeholder, rows, form, update }) => (
+  <div>
+    <label className="text-xs font-mono text-text-muted tracking-widest uppercase block mb-2">{label}</label>
+    {rows ? (
+      <textarea
+        value={form[field]}
+        onChange={e => update(field, e.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        className="w-full bg-black/30 border border-border rounded-lg px-4 py-3 text-text-primary font-body text-sm placeholder-text-muted resize-none focus:outline-none focus:border-electric-blue/60 transition-all"
+      />
+    ) : (
+      <input
+        type={type}
+        value={form[field]}
+        onChange={e => update(field, e.target.value)}
+        placeholder={placeholder}
+        className="w-full bg-black/30 border border-border rounded-lg px-4 py-3 text-text-primary font-body text-sm placeholder-text-muted focus:outline-none focus:border-electric-blue/60 transition-all"
+      />
+    )}
+  </div>
+)
+
 export default function DeployStudio() {
   const [step, setStep] = useState(1)
   const [deploying, setDeploying] = useState(false)
   const [deployed, setDeployed] = useState(false)
-  const { isConnected } = useAuthStore()
+  const { isConnected, walletAddress } = useAuthStore()
 
   const [form, setForm] = useState({
     name: '',
@@ -37,33 +61,36 @@ export default function DeployStudio() {
 
   const handleDeploy = async () => {
     setDeploying(true)
-    await new Promise(r => setTimeout(r, 3000))
-    setDeploying(false)
-    setDeployed(true)
-  }
+    try {
+      let parsedSchema = null
+      if (form.mcpSchema) {
+        try {
+          parsedSchema = JSON.parse(form.mcpSchema)
+        } catch (e) {
+          throw new Error("Invalid MCP Schema JSON")
+        }
+      }
 
-  const InputField = ({ label, field, type = 'text', placeholder, rows }) => (
-    <div>
-      <label className="text-xs font-mono text-text-muted tracking-widest uppercase block mb-2">{label}</label>
-      {rows ? (
-        <textarea
-          value={form[field]}
-          onChange={e => update(field, e.target.value)}
-          rows={rows}
-          placeholder={placeholder}
-          className="w-full bg-black/30 border border-border rounded-lg px-4 py-3 text-text-primary font-body text-sm placeholder-text-muted resize-none focus:outline-none focus:border-electric-blue/60 transition-all"
-        />
-      ) : (
-        <input
-          type={type}
-          value={form[field]}
-          onChange={e => update(field, e.target.value)}
-          placeholder={placeholder}
-          className="w-full bg-black/30 border border-border rounded-lg px-4 py-3 text-text-primary font-body text-sm placeholder-text-muted focus:outline-none focus:border-electric-blue/60 transition-all"
-        />
-      )}
-    </div>
-  )
+      const payload = {
+        name: form.name,
+        category: form.category,
+        endpoint: form.endpoint,
+        mcpSchema: parsedSchema,
+        description: form.description,
+        tags: form.tags.split(',').map(tag => tag.trim()).filter(Boolean),
+        pricing: parseFloat(form.pricing) || 0,
+        ownerWallet: walletAddress
+      }
+      
+      await agentsAPI.deploy(payload)
+      setDeployed(true)
+    } catch (error) {
+      console.error("Deploy failed:", error)
+      alert(`Failed to deploy agent: ${error.message}`)
+    } finally {
+      setDeploying(false)
+    }
+  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -128,7 +155,7 @@ export default function DeployStudio() {
             {step === 1 && (
               <div className="space-y-5">
                 <h2 className="font-display font-bold text-xl text-text-primary mb-5">Agent Identity</h2>
-                <InputField label="AGENT NAME" field="name" placeholder="e.g. DataSynth-X" />
+                <InputField label="AGENT NAME" field="name" placeholder="e.g. DataSynth-X" form={form} update={update} />
                 <div>
                   <label className="text-xs font-mono text-text-muted tracking-widest uppercase block mb-2">CATEGORY</label>
                   <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
@@ -154,7 +181,7 @@ export default function DeployStudio() {
             {step === 2 && (
               <div className="space-y-5">
                 <h2 className="font-display font-bold text-xl text-text-primary mb-5">MCP Endpoint</h2>
-                <InputField label="ENDPOINT URL" field="endpoint" placeholder="https://your-agent.example.com" />
+                <InputField label="ENDPOINT URL" field="endpoint" placeholder="https://your-agent.example.com" form={form} update={update} />
                 <InputField
                   label="MCP SCHEMA (JSON)"
                   field="mcpSchema"
@@ -175,6 +202,8 @@ export default function DeployStudio() {
     }
   ]
 }`}
+                  form={form}
+                  update={update}
                 />
                 <div className="flex items-center justify-between p-3 rounded-lg bg-panel-light border border-border">
                   <span className="text-sm font-mono text-text-secondary">Endpoint validation</span>
@@ -194,8 +223,8 @@ export default function DeployStudio() {
             {step === 3 && (
               <div className="space-y-5">
                 <h2 className="font-display font-bold text-xl text-text-primary mb-5">Metadata</h2>
-                <InputField label="DESCRIPTION" field="description" rows={4} placeholder="Describe what your agent does..." />
-                <InputField label="TAGS (comma separated)" field="tags" placeholder="e.g. analysis, data, ml, realtime" />
+                <InputField label="DESCRIPTION" field="description" rows={4} placeholder="Describe what your agent does..." form={form} update={update} />
+                <InputField label="TAGS (comma separated)" field="tags" placeholder="e.g. analysis, data, ml, realtime" form={form} update={update} />
               </div>
             )}
 
@@ -203,7 +232,7 @@ export default function DeployStudio() {
             {step === 4 && (
               <div className="space-y-5">
                 <h2 className="font-display font-bold text-xl text-text-primary mb-5">Pricing Model</h2>
-                <InputField label="PRICE PER CALL (ETH)" field="pricing" type="number" placeholder="0.05" />
+                <InputField label="PRICE PER CALL (ETH)" field="pricing" type="number" placeholder="0.05" form={form} update={update} />
                 <div className="grid grid-cols-3 gap-3">
                   {[
                     { label: 'MICRO', value: '0.001', desc: 'High volume' },

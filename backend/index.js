@@ -8,9 +8,6 @@ import config from './config/config.js'
 import { errorHandler } from './middlewares/errorHandler.js'
 import { apiLimiter } from './middlewares/rateLimiter.js'
 
-import { startLeaderboardJob } from './jobs/leaderboardJob.js'
-import { startHealthCheckJob } from './jobs/healthCheckJob.js'
-
 import contractManager from './blockchain/contracts.js'
 import prisma from './lib/prisma.js'
 
@@ -33,7 +30,7 @@ app.use(
 app.use(
   cors({
     origin: config.isDev
-      ? ['http://localhost:3000', 'http://localhost:5173']
+      ? ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:5174']
       : process.env.ALLOWED_ORIGINS?.split(',') || [],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -80,9 +77,7 @@ const start = async () => {
     await contractManager.init()
     contractManager.startAllListeners(prisma)
 
-    // Start background jobs
-    startLeaderboardJob()
-    startHealthCheckJob()
+    // Cron jobs have been removed from here
 
     app.listen(config.port, () => {
       console.log(`\n🚀 Neural Market API running on port ${config.port}`)
