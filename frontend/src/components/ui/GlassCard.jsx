@@ -6,27 +6,19 @@ export default function GlassCard({
   children,
   className = '',
   glow = false,
-  glowColor = 'blue',
   hover = true,
-  noBorder = false,
   onClick,
   ...props
 }) {
-  const glowClasses = {
-    blue: 'hover:shadow-glow-blue hover:border-electric-blue/30',
-    purple: 'hover:shadow-glow-purple hover:border-neon-purple/30',
-    green: 'hover:shadow-glow-green hover:border-cyber-green/30',
-  }
-
   return (
     <motion.div
-      whileHover={hover ? { y: -2, scale: 1.005 } : {}}
-      transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+      whileHover={hover ? { y: -1, scale: 1.002 } : {}}
+      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
       onClick={onClick}
       className={clsx(
-        'glass-panel rounded-lg transition-all duration-300',
-        !noBorder && 'border border-border',
-        hover && glowClasses[glowColor],
+        'glass-panel rounded-xl transition-all duration-300',
+        glow && 'glow-border',
+        hover && 'hover:border-[var(--color-border-bright)]',
         onClick && 'cursor-pointer',
         className
       )}

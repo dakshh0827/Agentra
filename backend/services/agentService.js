@@ -8,8 +8,14 @@ class AgentService {
    */
   async createAgent(data, ownerWallet) {
     const {
-      name, description, endpoint, category,
-      tags = [], pricing, mcpSchema,
+      name,
+      description,
+      endpoint = '',      // optional for database-only deploys
+      category,
+      tags = [],
+      pricing,
+      mcpSchema,
+      deployMode = 'blockchain',  // passed through so it can be stored / logged
     } = data
 
     const agent = await prisma.agent.create({
@@ -22,7 +28,7 @@ class AgentService {
         tags,
         pricing: parseFloat(pricing),
         mcpSchema: mcpSchema || null,
-        ownerWallet,
+        ownerWallet: ownerWallet.toLowerCase(),
         status: 'active',
       },
       include: { metrics: true },
@@ -40,6 +46,8 @@ class AgentService {
       create: { id: 'global', totalAgents: 1, activeAgents: 1 },
     })
 
+    console.log(`[AGENT SERVICE] Created agent "${name}" (${deployMode}) for wallet ${ownerWallet.slice(0, 10)}...`)
+
     return agent
   }
 
@@ -47,6 +55,11 @@ class AgentService {
    * Validate that an endpoint is reachable
    */
   async validateEndpoint(endpoint) {
+    // Guard against empty/missing endpoint
+    if (!endpoint) {
+      return { valid: false, error: 'No endpoint provided' }
+    }
+
     const urls = [
       `${endpoint}/health`,
       `${endpoint}/ping`,
@@ -74,7 +87,7 @@ class AgentService {
   async getAgents({
     category,
     search,
-    status, // Removed default 'active' so it can accept 'all' or undefined properly
+    status,
     sortBy = 'score',
     page = 1,
     limit = 20,
@@ -82,11 +95,9 @@ class AgentService {
   } = {}) {
     const where = {}
 
-    // Handle status filtering properly
     if (status && status !== 'all') {
       where.status = status
     } else {
-      // If 'all' or undefined, fetch everything EXCEPT soft-deleted ('inactive') agents
       where.status = { not: 'inactive' }
     }
 
@@ -237,7 +248,6 @@ class AgentService {
   async searchAgents(query) {
     return prisma.agent.findMany({
       where: {
-        // Exclude inactive agents so offline agents still show up in search
         status: { not: 'inactive' },
         OR: [
           { name: { contains: query, mode: 'insensitive' } },

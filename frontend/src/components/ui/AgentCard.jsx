@@ -1,116 +1,119 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { Zap, Star, TrendingUp, Activity, Tag } from 'lucide-react'
-import GlassCard from './GlassCard'
+import { Zap, Star, TrendingUp, Activity, Tag, Circle } from 'lucide-react'
 import clsx from 'clsx'
 
 const categoryColors = {
-  Analysis: 'text-electric-blue bg-electric-blue/10 border-electric-blue/20',
-  Development: 'text-neon-purple bg-neon-purple/10 border-neon-purple/20',
-  Security: 'text-cyber-red bg-cyber-red/10 border-cyber-red/20',
-  Data: 'text-cyber-yellow bg-cyber-yellow/10 border-cyber-yellow/20',
-  NLP: 'text-cyber-green bg-cyber-green/10 border-cyber-green/20',
-  Web3: 'text-neon-purple bg-neon-purple/10 border-neon-purple/20',
+  Analysis: 'text-[var(--color-star-blue)] bg-[rgba(147,197,253,0.07)] border-[rgba(147,197,253,0.2)]',
+  Development: 'text-[var(--color-purple-bright)] bg-[rgba(168,85,247,0.07)] border-[rgba(168,85,247,0.2)]',
+  Security: 'text-[var(--color-danger)] bg-[rgba(248,113,113,0.07)] border-[rgba(248,113,113,0.2)]',
+  Data: 'text-[var(--color-warning)] bg-[rgba(251,191,36,0.07)] border-[rgba(251,191,36,0.2)]',
+  NLP: 'text-[var(--color-success)] bg-[rgba(52,211,153,0.07)] border-[rgba(52,211,153,0.2)]',
+  Web3: 'text-[var(--color-accent-fuchsia)] bg-[rgba(217,70,239,0.07)] border-[rgba(217,70,239,0.2)]',
+  Other: 'text-[var(--color-text-muted)] bg-[rgba(109,79,160,0.07)] border-[rgba(109,79,160,0.2)]',
 }
 
-const statusDot = {
-  active: 'bg-cyber-green',
-  busy: 'bg-cyber-yellow',
-  offline: 'bg-cyber-red',
+const statusConfig = {
+  active: { color: 'text-[var(--color-success)]', dot: 'bg-[var(--color-success)]' },
+  busy: { color: 'text-[var(--color-warning)]', dot: 'bg-[var(--color-warning)]' },
+  offline: { color: 'text-[var(--color-danger)]', dot: 'bg-[var(--color-danger)]' },
 }
 
 export default function AgentCard({ agent, index = 0 }) {
+  const status = statusConfig[agent.status] || statusConfig.active
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05 }}
+      transition={{ delay: index * 0.04, duration: 0.4 }}
     >
-      <Link to={`/agent/${agent._id}`}>
-        <GlassCard className="p-5 group holo-border" glowColor="blue">
+      <Link to={`/agent/${agent._id || agent.id}`} style={{ cursor: 'pointer' }}>
+        <motion.div
+          whileHover={{ y: -2 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+          className="glass-panel rounded-xl p-5 border border-[var(--color-border)] hover:border-[var(--color-border-bright)] transition-all duration-300 h-full flex flex-col"
+        >
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3">
-              {/* Agent Icon */}
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-electric-blue/20 to-neon-purple/20 border border-electric-blue/30 flex items-center justify-center">
-                <Zap size={18} className="text-electric-blue" />
+              <div className="w-10 h-10 rounded-lg bg-[var(--color-nebula)] border border-[var(--color-border-bright)] flex items-center justify-center shrink-0">
+                <Zap size={17} className="text-[var(--color-purple-bright)]" />
               </div>
               <div>
-                <h3 className="font-display font-bold text-text-primary text-base tracking-wide group-hover:text-glow-blue transition-all">
+                <h3 className="font-display font-bold text-[var(--color-text-primary)] text-sm tracking-wide leading-tight">
                   {agent.name}
                 </h3>
                 <span className={clsx(
-                  'inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border',
-                  categoryColors[agent.category] || categoryColors.Data
+                  'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border mt-0.5',
+                  categoryColors[agent.category] || categoryColors.Other
                 )}>
                   {agent.category}
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className={clsx('w-2 h-2 rounded-full pulse-dot', statusDot[agent.status] || statusDot.active)} />
-              <span className="text-xs font-mono text-text-muted capitalize">{agent.status}</span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className={clsx('w-1.5 h-1.5 rounded-full pulse-dot', status.dot)} />
+              <span className={clsx('text-[10px] font-mono capitalize', status.color)}>{agent.status}</span>
             </div>
           </div>
 
           {/* Description */}
-          <p className="text-text-secondary text-sm leading-relaxed mb-4 line-clamp-2">
+          <p className="text-[var(--color-text-muted)] text-xs leading-relaxed mb-3 line-clamp-2 flex-1">
             {agent.description}
           </p>
 
           {/* Tags */}
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {agent.tags?.slice(0, 3).map(tag => (
-              <span key={tag} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-mono bg-panel-light border border-border text-text-muted">
-                <Tag size={9} />
-                {tag}
-              </span>
-            ))}
-          </div>
+          {agent.tags?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {agent.tags.slice(0, 3).map(tag => (
+                <span key={tag} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-nebula-deep)] border border-[var(--color-border)] text-[var(--color-text-dim)]">
+                  <Tag size={8} />
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Metrics */}
-          <div className="grid grid-cols-3 gap-3 mb-4 py-3 border-t border-b border-border">
+          <div className="grid grid-cols-3 gap-2 mb-3 py-2.5 border-t border-b border-[var(--color-border)]">
             <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-cyber-yellow mb-1">
-                <Star size={12} fill="currentColor" />
-                <span className="text-sm font-mono font-bold">{agent.rating}</span>
+              <div className="flex items-center justify-center gap-1 text-[var(--color-warning)] mb-0.5">
+                <Star size={11} fill="currentColor" />
+                <span className="text-xs font-mono font-bold">{agent.rating || 0}</span>
               </div>
-              <div className="text-xs text-text-muted">Rating</div>
+              <div className="text-[9px] text-[var(--color-text-dim)] font-mono">RATING</div>
             </div>
             <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-electric-blue mb-1">
-                <Activity size={12} />
-                <span className="text-sm font-mono font-bold">{(agent.calls / 1000).toFixed(1)}k</span>
+              <div className="flex items-center justify-center gap-1 text-[var(--color-star-blue)] mb-0.5">
+                <Activity size={11} />
+                <span className="text-xs font-mono font-bold">{((agent.calls || 0) / 1000).toFixed(1)}k</span>
               </div>
-              <div className="text-xs text-text-muted">Calls</div>
+              <div className="text-[9px] text-[var(--color-text-dim)] font-mono">CALLS</div>
             </div>
             <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-cyber-green mb-1">
-                <TrendingUp size={12} />
-                <span className="text-sm font-mono font-bold">{agent.successRate}%</span>
+              <div className="flex items-center justify-center gap-1 text-[var(--color-success)] mb-0.5">
+                <TrendingUp size={11} />
+                <span className="text-xs font-mono font-bold">{agent.successRate || 0}%</span>
               </div>
-              <div className="text-xs text-text-muted">Success</div>
+              <div className="text-[9px] text-[var(--color-text-dim)] font-mono">SUCCESS</div>
             </div>
           </div>
 
           {/* Price */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-text-muted text-xs font-mono">PRICE</span>
-              <span className="text-electric-blue font-mono font-bold text-sm">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-[var(--color-purple-bright)] font-mono font-bold text-sm">
                 {agent.pricing} ETH
               </span>
-              <span className="text-text-muted text-xs">/call</span>
+              <span className="text-[var(--color-text-dim)] text-[10px] font-mono">/call</span>
             </div>
-            <motion.div
-              className="px-3 py-1.5 rounded bg-electric-blue/10 border border-electric-blue/30 text-electric-blue text-xs font-mono tracking-wider"
-              whileHover={{ backgroundColor: 'rgba(0,168,255,0.2)' }}
-            >
+            <span className="px-2.5 py-1 rounded bg-[var(--color-nebula)] border border-[var(--color-border-bright)] text-[var(--color-purple-bright)] text-[10px] font-mono tracking-widest">
               EXECUTE →
-            </motion.div>
+            </span>
           </div>
-        </GlassCard>
+        </motion.div>
       </Link>
     </motion.div>
   )

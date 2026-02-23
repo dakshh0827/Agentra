@@ -4,21 +4,35 @@ import { asyncHandler, createError } from '../middlewares/errorHandler.js'
 import { z } from 'zod'
 
 // ── Validation schemas ────────────────────────────────────
-const deploySchema = z.object({
+
+// Base fields shared by both deploy modes
+const deployBaseSchema = z.object({
   name: z.string().min(2).max(64),
   description: z.string().min(10).max(1000).optional(),
-  endpoint: z.string().url(),
   category: z.enum(['Analysis', 'Development', 'Security', 'Data', 'NLP', 'Web3', 'Other']),
   tags: z.array(z.string().max(32)).max(10).optional(),
-  pricing: z.number().positive().max(100),
+  // Allow 0 pricing for database-only agents
+  pricing: z.number().min(0).max(100),
   mcpSchema: z.record(z.any()).optional(),
+  deployMode: z.enum(['database', 'blockchain']).default('blockchain'),
+  ownerWallet: z.string().optional(), // passed from frontend, but req.walletAddress is authoritative
+})
+
+// Blockchain deploy requires a valid endpoint URL
+const blockchainDeploySchema = deployBaseSchema.extend({
+  endpoint: z.string().url(),
+})
+
+// Database deploy makes endpoint optional
+const databaseDeploySchema = deployBaseSchema.extend({
+  endpoint: z.string().url().optional().default(''),
 })
 
 const updateSchema = z.object({
   name: z.string().min(2).max(64).optional(),
   description: z.string().min(10).max(1000).optional(),
   endpoint: z.string().url().optional(),
-  pricing: z.number().positive().max(100).optional(),
+  pricing: z.number().min(0).max(100).optional(),
   tags: z.array(z.string()).optional(),
   category: z.enum(['Analysis', 'Development', 'Security', 'Data', 'NLP', 'Web3', 'Other']).optional(),
 })
@@ -31,9 +45,7 @@ const getAgents = asyncHandler(async (req, res) => {
   const result = await agentService.getAgents({
     category: category === 'all' ? undefined : category,
     search,
-    // Fix: Allow all agents unless specifically requesting a specific status.
-    // Removes the hardcoded 'active' default that hid the offline agents.
-    status: (!status || status === 'all') ? undefined : status, 
+    status: (!status || status === 'all') ? undefined : status,
     sortBy: sortBy || 'score',
     page: parseInt(page) || 1,
     limit: Math.min(parseInt(limit) || 20, 100),
@@ -49,25 +61,47 @@ const getAgentById = asyncHandler(async (req, res) => {
 })
 
 const deployAgent = asyncHandler(async (req, res) => {
-  const data = deploySchema.parse(req.body)
+  const { deployMode = 'blockchain' } = req.body
 
-  // Optionally validate endpoint
-  if (req.query.skipValidation !== 'true') {
+  // Pick the right schema based on deploy mode
+  let data
+  try {
+    if (deployMode === 'database') {
+      data = databaseDeploySchema.parse(req.body)
+    } else {
+      data = blockchainDeploySchema.parse(req.body)
+    }
+  } catch (err) {
+    // Re-throw zod errors so the error handler formats them nicely
+    throw err
+  }
+
+  // Only validate endpoint reachability for blockchain deploys
+  // (database deploys may have no endpoint yet)
+  if (deployMode === 'blockchain' && req.query.skipValidation !== 'true' && data.endpoint) {
     const validation = await agentService.validateEndpoint(data.endpoint)
     if (!validation.valid) {
-      return res.status(400).json({ error: 'Endpoint validation failed', details: validation.error })
+      return res.status(400).json({
+        error: 'Endpoint validation failed',
+        details: validation.error,
+      })
     }
   }
 
+  // ownerWallet is always req.walletAddress (set by authMiddleware) — never trust body
   const agent = await agentService.createAgent(data, req.walletAddress)
 
-  // Register on-chain (non-blocking)
-  blockchainService.registerAgentOnChain(
-    agent.agentId,
-    req.walletAddress,
-    agent.metadataUri,
-    agent.pricing
-  ).catch(err => console.warn('[AGENT] On-chain registration failed:', err.message))
+  // Only register on-chain for blockchain deploy mode
+  if (deployMode === 'blockchain') {
+    blockchainService.registerAgentOnChain(
+      agent.agentId,
+      req.walletAddress,
+      agent.metadataUri,
+      agent.pricing
+    ).catch(err => console.warn('[AGENT] On-chain registration failed (non-blocking):', err.message))
+  } else {
+    console.log(`[AGENT] Database-only deploy for agent: ${agent.agentId} — skipping on-chain registration`)
+  }
 
   res.status(201).json(agent)
 })
