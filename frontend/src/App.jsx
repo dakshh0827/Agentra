@@ -1,6 +1,8 @@
 import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/layouts/Layout'
+import LandingLayout from './components/layouts/LandingLayout'
+import LandingPage from './pages/LandingPage'
 import Marketplace from './pages/Marketplace'
 import AgentDetail from './pages/AgentDetail'
 import DeployStudio from './pages/DeployStudio'
@@ -11,8 +13,13 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/marketplace" replace />} />
+        {/* Landing page with its own layout (navbar, no sidebar) */}
+        <Route element={<LandingLayout />}>
+          <Route path="/" element={<LandingPage />} />
+        </Route>
+
+        {/* App pages with sidebar layout */}
+        <Route element={<Layout />}>
           <Route path="marketplace" element={<Marketplace />} />
           <Route path="agent/:id" element={<AgentDetail />} />
           <Route path="deploy" element={<DeployStudio />} />

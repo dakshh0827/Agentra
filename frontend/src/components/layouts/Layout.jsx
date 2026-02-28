@@ -11,11 +11,11 @@ export default function Layout() {
       <StarField />
       <NeuralGrid />
 
-      {/* Very subtle, small ambient glows — not screaming purple */}
-      <div className="fixed top-0 right-0 w-[500px] h-[300px] rounded-full pointer-events-none z-0"
-        style={{ background: 'radial-gradient(ellipse, rgba(100,40,200,0.04) 0%, transparent 70%)' }} />
-      <div className="fixed bottom-0 left-0 w-[400px] h-[250px] rounded-full pointer-events-none z-0"
-        style={{ background: 'radial-gradient(ellipse, rgba(80,30,160,0.03) 0%, transparent 70%)' }} />
+      {/* Subtle ambient glows for depth */}
+      <div className="fixed top-0 right-0 w-[600px] h-[350px] rounded-full pointer-events-none z-0"
+        style={{ background: 'radial-gradient(ellipse, rgba(124,58,237,0.04) 0%, transparent 70%)' }} />
+      <div className="fixed bottom-0 left-0 w-[450px] h-[280px] rounded-full pointer-events-none z-0"
+        style={{ background: 'radial-gradient(ellipse, rgba(147,51,234,0.03) 0%, transparent 70%)' }} />
 
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 relative z-10">

@@ -1,6 +1,7 @@
 import React from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Radio, Bell, ChevronDown } from 'lucide-react'
+import { Radio, Bell, ChevronDown, Cpu } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useWallet } from '../../hooks/useWallet'
 import NeonButton from '../ui/NeonButton'
@@ -10,14 +11,22 @@ export default function TopBar() {
   const { connect, disconnect, isConnecting } = useWallet()
 
   return (
-    <header className="h-13 glass-panel border-b border-[var(--color-border)] flex items-center justify-between px-5 shrink-0 z-10">
+    <header className="h-13 glass-panel border-b border-[var(--color-border)] flex items-center justify-between px-4 sm:px-5 shrink-0 z-10">
       {/* Left */}
-      <div className="flex items-center gap-5">
-        <div className="flex items-center gap-2 text-[var(--color-success)] text-[10px] font-mono tracking-widest">
+      <div className="flex items-center gap-4">
+        {/* Mobile brand (visible when sidebar is hidden) */}
+        <Link to="/" className="lg:hidden flex items-center gap-2 shrink-0">
+          <div className="w-7 h-7 rounded-md bg-[var(--color-nebula)] border border-[var(--color-border-bright)] flex items-center justify-center">
+            <Cpu size={13} className="text-[var(--color-purple-bright)]" />
+          </div>
+          <span className="font-display font-bold text-xs text-[var(--color-text-primary)] tracking-[0.15em]">AGENTRA</span>
+        </Link>
+
+        <div className="hidden sm:flex items-center gap-2 text-[var(--color-success)] text-[10px] font-mono tracking-widest">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] pulse-dot" />
           NETWORK ONLINE
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-[var(--color-text-dim)] text-[10px] font-mono tracking-widest">
+        <div className="hidden md:flex items-center gap-1.5 text-[var(--color-text-dim)] text-[10px] font-mono tracking-widest">
           <Radio size={11} />
           ETH MAINNET
         </div>
@@ -28,7 +37,7 @@ export default function TopBar() {
         <motion.div
           animate={{ opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 3, repeat: Infinity }}
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-nebula-deep)] border border-[var(--color-border)] text-[10px] font-mono text-[var(--color-text-dim)]"
+          className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-nebula-deep)] border border-[var(--color-border)] text-[10px] font-mono text-[var(--color-text-dim)]"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-purple-bright)] pulse-dot" />
           AGENTS: 247 ONLINE

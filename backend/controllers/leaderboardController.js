@@ -165,8 +165,11 @@ const recalculateScores = asyncHandler(async (req, res) => {
 const getAgentRank = asyncHandler(async (req, res) => {
   const { id } = req.params
 
+  const isObjectId = /^[a-f\d]{24}$/i.test(id)
   const agent = await prisma.agent.findFirst({
-    where: { OR: [{ id }, { agentId: id }] },
+    where: isObjectId
+      ? { OR: [{ id }, { agentId: id }] }
+      : { agentId: id },
   })
 
   if (!agent) {

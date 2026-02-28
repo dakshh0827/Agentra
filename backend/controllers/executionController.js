@@ -90,9 +90,12 @@ const voteOnAgent = asyncHandler(async (req, res) => {
   const voterWallet = req.walletAddress
 
   // Find agent
-  const agent = await prisma.agent.findFirst({
-    where: { OR: [{ id }, { agentId: id }] },
-  })
+  const isObjectId = /^[a-f\d]{24}$/i.test(id)
+const agent = await prisma.agent.findFirst({
+  where: isObjectId
+    ? { OR: [{ id }, { agentId: id }] }
+    : { agentId: id },
+})
   if (!agent) return res.status(404).json({ error: 'Agent not found' })
 
   // Cannot vote on your own agent

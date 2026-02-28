@@ -5,25 +5,21 @@ import { z } from 'zod'
 
 // ── Validation schemas ────────────────────────────────────
 
-// Base fields shared by both deploy modes
 const deployBaseSchema = z.object({
   name: z.string().min(2).max(64),
   description: z.string().min(10).max(1000).optional(),
   category: z.enum(['Analysis', 'Development', 'Security', 'Data', 'NLP', 'Web3', 'Other']),
   tags: z.array(z.string().max(32)).max(10).optional(),
-  // Allow 0 pricing for database-only agents
   pricing: z.number().min(0).max(100),
-  mcpSchema: z.record(z.any()).optional(),
+  mcpSchema: z.record(z.string(), z.unknown()).optional(),
   deployMode: z.enum(['database', 'blockchain']).default('blockchain'),
-  ownerWallet: z.string().optional(), // passed from frontend, but req.walletAddress is authoritative
+  ownerWallet: z.string().optional(),
 })
 
-// Blockchain deploy requires a valid endpoint URL
 const blockchainDeploySchema = deployBaseSchema.extend({
   endpoint: z.string().url(),
 })
 
-// Database deploy makes endpoint optional
 const databaseDeploySchema = deployBaseSchema.extend({
   endpoint: z.string().url().optional().default(''),
 })
@@ -63,7 +59,6 @@ const getAgentById = asyncHandler(async (req, res) => {
 const deployAgent = asyncHandler(async (req, res) => {
   const { deployMode = 'blockchain' } = req.body
 
-  // Pick the right schema based on deploy mode
   let data
   try {
     if (deployMode === 'database') {
@@ -72,12 +67,9 @@ const deployAgent = asyncHandler(async (req, res) => {
       data = blockchainDeploySchema.parse(req.body)
     }
   } catch (err) {
-    // Re-throw zod errors so the error handler formats them nicely
     throw err
   }
 
-  // Only validate endpoint reachability for blockchain deploys
-  // (database deploys may have no endpoint yet)
   if (deployMode === 'blockchain' && req.query.skipValidation !== 'true' && data.endpoint) {
     const validation = await agentService.validateEndpoint(data.endpoint)
     if (!validation.valid) {
@@ -88,10 +80,8 @@ const deployAgent = asyncHandler(async (req, res) => {
     }
   }
 
-  // ownerWallet is always req.walletAddress (set by authMiddleware) — never trust body
   const agent = await agentService.createAgent(data, req.walletAddress)
 
-  // Only register on-chain for blockchain deploy mode
   if (deployMode === 'blockchain') {
     blockchainService.registerAgentOnChain(
       agent.agentId,

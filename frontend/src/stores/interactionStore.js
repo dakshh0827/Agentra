@@ -7,7 +7,7 @@ export const useInteractionStore = create((set, get) => ({
   executionResult: null,
 
   addLog: (log) => set((state) => ({
-    logs: [{ ...log, id: Date.now(), timestamp: new Date().toISOString() }, ...state.logs].slice(0, 100)
+    logs: [{ ...log, id: `${Date.now()}-${Math.random()}`, timestamp: new Date().toISOString() }, ...state.logs]
   })),
 
   setActiveCall: (call) => set({ activeCall: call }),

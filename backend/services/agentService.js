@@ -148,19 +148,22 @@ class AgentService {
   /**
    * Get single agent by ID or agentId
    */
-  async getById(id) {
-    const agent = await prisma.agent.findFirst({
-      where: {
-        OR: [{ id }, { agentId: id }],
-      },
-      include: {
-        metrics: true,
-        _count: { select: { votes: true, interactions: true } },
-      },
-    })
-    if (!agent) throw Object.assign(new Error('Agent not found'), { status: 404 })
-    return agent
-  }
+ async getById(id) {
+  // Determine if id is a MongoDB ObjectId (24 hex chars) or custom agentId (AGT-XXXXXXXX)
+  const isObjectId = /^[a-f\d]{24}$/i.test(id)
+
+  const agent = await prisma.agent.findFirst({
+    where: isObjectId
+      ? { OR: [{ id }, { agentId: id }] }
+      : { agentId: id },
+    include: {
+      metrics: true,
+      _count: { select: { votes: true, interactions: true } },
+    },
+  })
+  if (!agent) throw Object.assign(new Error('Agent not found'), { status: 404 })
+  return agent
+}
 
   /**
    * Update agent (owner only)
