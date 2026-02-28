@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
 import { Search, Zap, Globe, RefreshCw, Sparkles, TrendingUp, Activity, Cpu } from 'lucide-react'
 import AgentCard from '../components/ui/AgentCard'
-import GlassCard from '../components/ui/GlassCard'
 import NeonButton from '../components/ui/NeonButton'
 import LoadingPulse from '../components/ui/LoadingPulse'
 import { useAgents } from '../hooks/useAgents'
@@ -102,7 +101,9 @@ export default function Marketplace() {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[rgba(124,58,237,0.25)] bg-[rgba(124,58,237,0.06)] mb-4"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] pulse-dot" />
-            <span className="text-[10px] font-mono text-[var(--color-purple-pale)] tracking-[0.2em]">AGENT PROTOCOL v2.4 — LIVE</span>
+            <span className="text-[10px] font-mono text-[var(--color-purple-pale)] tracking-[0.2em]">
+              NETWORK LIVE — {stats?.activeAgents || 0} AGENTS ONLINE
+            </span>
           </motion.div>
           
           <h1 className="font-display font-extrabold text-4xl sm:text-5xl lg:text-6xl text-[var(--color-text-primary)] leading-[1.1] tracking-tight">

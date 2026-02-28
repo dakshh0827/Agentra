@@ -5,7 +5,6 @@ import {
   Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts'
 import { BarChart3, TrendingUp, Zap, DollarSign, Activity, ArrowUpRight, Wallet, Sparkles, Clock } from 'lucide-react'
-import GlassCard from '../components/ui/GlassCard'
 import MetricBadge from '../components/ui/MetricBadge'
 import LoadingPulse from '../components/ui/LoadingPulse'
 import { analyticsAPI } from '../api/analytics'
@@ -101,11 +100,12 @@ export default function Dashboard() {
   const agentPerf = data.agentPerf || []
   const activityFeed = data.activityFeed || []
 
+  // Cleaned up metric cards - entirely reliant on actual backend data without faked percentages
   const metricCards = [
-    { label: 'TOTAL REVENUE', value: `${metrics.totalRevenue || 0} ETH`, color: 'green', icon: DollarSign, sublabel: '+32% this week', gradient: 'from-emerald-500/15 to-transparent' },
-    { label: 'TOTAL CALLS', value: (metrics.totalCalls || 0).toLocaleString(), color: 'blue', icon: Activity, sublabel: '+18% this week', gradient: 'from-blue-500/15 to-transparent' },
+    { label: 'TOTAL REVENUE', value: `${parseFloat(metrics.totalRevenue || 0).toFixed(4)} ETH`, color: 'green', icon: DollarSign, sublabel: 'All time earnings', gradient: 'from-emerald-500/15 to-transparent' },
+    { label: 'TOTAL CALLS', value: (metrics.totalCalls || 0).toLocaleString(), color: 'blue', icon: Activity, sublabel: 'Total executions', gradient: 'from-blue-500/15 to-transparent' },
     { label: 'MY AGENTS', value: metrics.agentsCount || 0, color: 'purple', icon: Zap, sublabel: `${metrics.activeAgentsCount || 0} active`, gradient: 'from-purple-500/15 to-transparent' },
-    { label: 'SUCCESS RATE', value: `${metrics.successRate || 0}%`, color: 'yellow', icon: TrendingUp, sublabel: 'All agents', gradient: 'from-amber-500/15 to-transparent' },
+    { label: 'SUCCESS RATE', value: `${(metrics.successRate || 0).toFixed(1)}%`, color: 'yellow', icon: TrendingUp, sublabel: 'Avg across agents', gradient: 'from-amber-500/15 to-transparent' },
   ]
 
   return (
@@ -173,16 +173,9 @@ export default function Dashboard() {
             <div className="glass-card-landing rounded-xl p-5 sm:p-6 h-full">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="font-display font-bold text-[var(--color-text-primary)] text-base sm:text-lg">Revenue (7 days)</h3>
+                  <h3 className="font-display font-bold text-[var(--color-text-primary)] text-base sm:text-lg">Revenue Chart</h3>
                   <p className="text-[var(--color-text-dim)] text-[10px] font-mono tracking-wider mt-0.5">ETH EARNINGS OVER TIME</p>
                 </div>
-                <motion.div 
-                  whileHover={{ scale: 1.05 }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[rgba(52,211,153,0.1)] border border-[rgba(52,211,153,0.2)]"
-                >
-                  <ArrowUpRight size={14} className="text-[var(--color-success)]" />
-                  <span className="text-[var(--color-success)] text-xs font-mono font-bold">+32%</span>
-                </motion.div>
               </div>
               {revenueData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={200}>

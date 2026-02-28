@@ -1,14 +1,23 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Radio, Bell, ChevronDown, Cpu } from 'lucide-react'
+import { Radio, Bell, ChevronDown } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useWallet } from '../../hooks/useWallet'
 import NeonButton from '../ui/NeonButton'
+import { analyticsAPI } from '../../api/analytics'
 
 export default function TopBar() {
   const { isConnected, balance, shortAddress } = useAuthStore()
   const { connect, disconnect, isConnecting } = useWallet()
+  const [stats, setStats] = useState(null)
+
+  useEffect(() => {
+    // Fetch global stats for the live agent count badge
+    analyticsAPI.getGlobalStats()
+      .then(res => setStats(res.data))
+      .catch(console.error)
+  }, [])
 
   return (
     <header className="h-13 glass-panel border-b border-[var(--color-border)] flex items-center justify-between px-4 sm:px-5 shrink-0 z-10">
@@ -17,7 +26,7 @@ export default function TopBar() {
         {/* Mobile brand (visible when sidebar is hidden) */}
         <Link to="/" className="lg:hidden flex items-center gap-2 shrink-0">
           <div className="w-7 h-7 rounded-md bg-[var(--color-nebula)] border border-[var(--color-border-bright)] flex items-center justify-center">
-            <Cpu size={13} className="text-[var(--color-purple-bright)]" />
+            <img src="/logo.png" className="w-7 h-7 object-contain"/>
           </div>
           <span className="font-display font-bold text-xs text-[var(--color-text-primary)] tracking-[0.15em]">AGENTRA</span>
         </Link>
@@ -34,13 +43,14 @@ export default function TopBar() {
 
       {/* Right */}
       <div className="flex items-center gap-3">
+        {/* Dynamic active agents count */}
         <motion.div
           animate={{ opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 3, repeat: Infinity }}
           className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-nebula-deep)] border border-[var(--color-border)] text-[10px] font-mono text-[var(--color-text-dim)]"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-purple-bright)] pulse-dot" />
-          AGENTS: 247 ONLINE
+          AGENTS: {stats?.activeAgents || 0} ONLINE
         </motion.div>
 
         <Bell size={16} className="text-[var(--color-text-dim)] hover:text-[var(--color-text-secondary)] cursor-pointer transition-colors" />

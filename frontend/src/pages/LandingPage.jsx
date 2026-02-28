@@ -1,12 +1,13 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import StarField from '../components/ui/StarField'
 import { motion, useInView } from 'framer-motion'
 import {
   Cpu, Zap, Shield, BarChart3, Globe, Upload,
-  ArrowRight, ChevronRight, Star, Activity,
+  ArrowRight, ChevronRight, Activity,
   Layers, Lock, Rocket, Code2,
 } from 'lucide-react'
+import { analyticsAPI } from '../api/analytics'
 
 /* ── Fade-in wrapper (triggers when scrolled into view) ── */
 function FadeInSection({ children, className = '', delay = 0 }) {
@@ -87,6 +88,16 @@ const STEPS = [
   },
 ]
 
+export default function LandingPage() {
+  const [stats, setStats] = useState(null)
+
+  useEffect(() => {
+    analyticsAPI.getGlobalStats()
+      .then(res => setStats(res.data))
+      .catch(console.error)
+  }, [])
+
+  // Dynamic stats calculated from the backend
 const STATS = [
   { value: 'MCP', label: 'Native Protocol' },
   { value: 'ETH', label: 'Base Settlement' },
@@ -94,7 +105,6 @@ const STATS = [
   { value: 'V1.0', label: 'Network Status' },
 ]
 
-export default function LandingPage() {
   return (
     <div className="relative min-h-screen bg-black overflow-hidden">
       {/* Star background */}
@@ -107,7 +117,7 @@ export default function LandingPage() {
         <div className="absolute bottom-0 left-0 w-[400px] h-[300px] rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(ellipse, rgba(147,51,234,0.04) 0%, transparent 70%)' }} />
 
-        {/* Badge */}
+        {/* Dynamic Badge */}
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
@@ -115,10 +125,11 @@ export default function LandingPage() {
           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[rgba(124,58,237,0.25)] bg-[rgba(124,58,237,0.06)] mb-8"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] pulse-dot" />
-          <span className="text-[11px] font-mono text-[var(--color-purple-pale)] tracking-[0.2em]">NETWORK LIVE — 250+ AGENTS ONLINE</span>
+          <span className="text-[11px] font-mono text-[var(--color-purple-pale)] tracking-[0.2em]">
+            NETWORK LIVE — {stats?.activeAgents || 0} AGENTS ONLINE
+          </span>
         </motion.div>
 
-        {/* Heading */}
         {/* Heading */}
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
@@ -164,7 +175,7 @@ export default function LandingPage() {
           </Link>
         </motion.div>
 
-        {/* Stats row */}
+        {/* Dynamic Stats row */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
