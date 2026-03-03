@@ -126,17 +126,18 @@ export default function AgentDetail() {
           </motion.div>
         </Link>
 
-        {/* Agent header — Enhanced */}
+        {/* Agent header — Bubble Pop Animation */}
         <motion.div 
-          initial={{ opacity: 0, y: 16 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          transition={{ duration: 0.5 }} 
+          layoutId={`agent-bubble-${id}`}
+          initial={{ opacity: 0, scale: 0.4, y: 40, borderRadius: '50%' }} 
+          animate={{ opacity: 1, scale: 1, y: 0, borderRadius: '16px' }} 
+          transition={{ type: 'spring', stiffness: 220, damping: 20, mass: 1 }} 
           className="mb-8"
         >
-          <div className="glass-card-landing rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+          <div className="glass-card-landing rounded-2xl p-6 sm:p-8 relative overflow-hidden shadow-[0_20px_60px_-15px_rgba(124,58,237,0.2)]">
             {/* Gradient overlay */}
             <div className="absolute top-0 right-0 w-[300px] h-[200px] rounded-full pointer-events-none"
-              style={{ background: 'radial-gradient(ellipse, rgba(124,58,237,0.08) 0%, transparent 70%)' }} />
+              style={{ background: 'radial-gradient(ellipse, rgba(124,58,237,0.15) 0%, transparent 70%)' }} />
             
             <div className="relative z-10 flex flex-col lg:flex-row items-start gap-6">
               {/* Agent icon */}
@@ -233,7 +234,7 @@ export default function AgentDetail() {
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-6">
           {/* Execution Panel — Left side */}
           <div className="lg:col-span-3 space-y-5">
-            <FadeInSection>
+            <FadeInSection delay={0.1}>
               <div className="glass-card-landing rounded-xl p-5 sm:p-6">
                 <h2 className="font-display font-bold text-base sm:text-lg text-[var(--color-text-primary)] mb-5 flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-[rgba(124,58,237,0.1)] border border-[rgba(124,58,237,0.2)] flex items-center justify-center">
@@ -307,7 +308,7 @@ export default function AgentDetail() {
               </div>
             </FadeInSection>
             
-            <FadeInSection delay={0.1}>
+            <FadeInSection delay={0.2}>
               <TerminalBox logs={logs} title="EXECUTION LOG" />
             </FadeInSection>
           </div>
@@ -315,7 +316,7 @@ export default function AgentDetail() {
           {/* Right panel */}
           <div className="lg:col-span-2 space-y-5">
             {/* Capabilities */}
-            <FadeInSection delay={0.1}>
+            <FadeInSection delay={0.15}>
               <div className="glass-card-landing rounded-xl p-5 sm:p-6">
                 <h3 className="font-mono text-[10px] tracking-[0.2em] text-[var(--color-text-dim)] uppercase mb-4 flex items-center gap-2">
                   <Sparkles size={12} className="text-[var(--color-purple-bright)]" />
@@ -340,7 +341,7 @@ export default function AgentDetail() {
             </FadeInSection>
 
             {/* Vote panel */}
-            <FadeInSection delay={0.15}>
+            <FadeInSection delay={0.2}>
               <div className="glass-card-landing rounded-xl p-5 sm:p-6">
                 <h3 className="font-mono text-[10px] tracking-[0.2em] text-[var(--color-text-dim)] uppercase mb-4">VOTE ON AGENT</h3>
                 <div className="flex gap-3">
@@ -382,7 +383,7 @@ export default function AgentDetail() {
             </FadeInSection>
 
             {/* Performance stats */}
-            <FadeInSection delay={0.2}>
+            <FadeInSection delay={0.25}>
               <div className="glass-card-landing rounded-xl p-5 sm:p-6">
                 <h3 className="font-mono text-[10px] tracking-[0.2em] text-[var(--color-text-dim)] uppercase mb-5 flex items-center gap-2">
                   <Gauge size={12} className="text-[var(--color-star-blue)]" />

@@ -25,93 +25,106 @@ export default function AgentCard({ agent, index = 0 }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.4 }}
+      initial={{ opacity: 0, y: 16, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: index * 0.04, duration: 0.4, type: 'spring' }}
+      className="h-full"
     >
-      <Link to={`/agent/${agent._id || agent.id}`} style={{ cursor: 'pointer' }}>
+      <Link to={`/agent/${agent._id || agent.id}`} style={{ cursor: 'pointer', display: 'block', height: '100%' }}>
         <motion.div
-          whileHover={{ y: -2 }}
-          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-          className="glass-panel rounded-xl p-5 border border-[var(--color-border)] hover:border-[var(--color-border-bright)] transition-all duration-300 h-full flex flex-col"
+          layoutId={`agent-bubble-${agent._id || agent.id}`}
+          whileHover={{ 
+            scale: 1.04, 
+            y: -8,
+            boxShadow: '0 20px 40px -10px rgba(124,58,237,0.35), inset 0 0 20px rgba(124,58,237,0.15)',
+            borderColor: 'rgba(168,85,247,0.5)'
+          }}
+          whileTap={{ scale: 0.95 }}
+          transition={{ type: 'spring', stiffness: 350, damping: 20 }}
+          className="glass-panel rounded-xl p-5 border border-[var(--color-border)] transition-colors duration-300 h-full flex flex-col relative overflow-hidden group"
         >
-          {/* Header */}
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-[var(--color-nebula)] border border-[var(--color-border-bright)] flex items-center justify-center shrink-0">
-                <Zap size={17} className="text-[var(--color-purple-bright)]" />
+          {/* Subtle animated background glow on hover */}
+          <div className="absolute inset-0 bg-gradient-to-br from-[rgba(124,58,237,0.08)] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col h-full">
+            {/* Header */}
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-[var(--color-nebula)] border border-[var(--color-border-bright)] flex items-center justify-center shrink-0">
+                  <Zap size={17} className="text-[var(--color-purple-bright)]" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-[var(--color-text-primary)] text-sm tracking-wide leading-tight group-hover:text-[var(--color-purple-pale)] transition-colors duration-300">
+                    {agent.name}
+                  </h3>
+                  <span className={clsx(
+                    'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border mt-0.5',
+                    categoryColors[agent.category] || categoryColors.Other
+                  )}>
+                    {agent.category}
+                  </span>
+                </div>
               </div>
-              <div>
-                <h3 className="font-display font-bold text-[var(--color-text-primary)] text-sm tracking-wide leading-tight">
-                  {agent.name}
-                </h3>
-                <span className={clsx(
-                  'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border mt-0.5',
-                  categoryColors[agent.category] || categoryColors.Other
-                )}>
-                  {agent.category}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <span className={clsx('w-1.5 h-1.5 rounded-full pulse-dot', status.dot)} />
+                <span className={clsx('text-[10px] font-mono capitalize', status.color)}>{agent.status}</span>
+              </div>
+            </div>
+
+            {/* Description */}
+            <p className="text-[var(--color-text-muted)] text-xs leading-relaxed mb-3 line-clamp-2 flex-1 group-hover:text-[var(--color-text-secondary)] transition-colors duration-300">
+              {agent.description}
+            </p>
+
+            {/* Tags */}
+            {agent.tags?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {agent.tags.slice(0, 3).map(tag => (
+                  <span key={tag} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-nebula-deep)] border border-[var(--color-border)] text-[var(--color-text-dim)] group-hover:border-[rgba(168,85,247,0.3)] transition-colors duration-300">
+                    <Tag size={8} />
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Metrics */}
+            <div className="grid grid-cols-3 gap-2 mb-3 py-2.5 border-t border-b border-[var(--color-border)] group-hover:border-[rgba(124,58,237,0.2)] transition-colors duration-300">
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1 text-[var(--color-warning)] mb-0.5">
+                  <Star size={11} fill="currentColor" />
+                  <span className="text-xs font-mono font-bold">{agent.rating || 0}</span>
+                </div>
+                <div className="text-[9px] text-[var(--color-text-dim)] font-mono">RATING</div>
+              </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1 text-[var(--color-star-blue)] mb-0.5">
+                  <Activity size={11} />
+                  <span className="text-xs font-mono font-bold">{((agent.calls || 0) / 1000).toFixed(1)}k</span>
+                </div>
+                <div className="text-[9px] text-[var(--color-text-dim)] font-mono">CALLS</div>
+              </div>
+              <div className="text-center">
+                <div className="flex items-center justify-center gap-1 text-[var(--color-success)] mb-0.5">
+                  <TrendingUp size={11} />
+                  <span className="text-xs font-mono font-bold">{agent.successRate || 0}%</span>
+                </div>
+                <div className="text-[9px] text-[var(--color-text-dim)] font-mono">SUCCESS</div>
+              </div>
+            </div>
+
+            {/* Price */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-[var(--color-purple-bright)] font-mono font-bold text-sm drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]">
+                  {agent.pricing} ETH
                 </span>
+                <span className="text-[var(--color-text-dim)] text-[10px] font-mono">/call</span>
               </div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className={clsx('w-1.5 h-1.5 rounded-full pulse-dot', status.dot)} />
-              <span className={clsx('text-[10px] font-mono capitalize', status.color)}>{agent.status}</span>
-            </div>
-          </div>
-
-          {/* Description */}
-          <p className="text-[var(--color-text-muted)] text-xs leading-relaxed mb-3 line-clamp-2 flex-1">
-            {agent.description}
-          </p>
-
-          {/* Tags */}
-          {agent.tags?.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {agent.tags.slice(0, 3).map(tag => (
-                <span key={tag} className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-nebula-deep)] border border-[var(--color-border)] text-[var(--color-text-dim)]">
-                  <Tag size={8} />
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* Metrics */}
-          <div className="grid grid-cols-3 gap-2 mb-3 py-2.5 border-t border-b border-[var(--color-border)]">
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-[var(--color-warning)] mb-0.5">
-                <Star size={11} fill="currentColor" />
-                <span className="text-xs font-mono font-bold">{agent.rating || 0}</span>
-              </div>
-              <div className="text-[9px] text-[var(--color-text-dim)] font-mono">RATING</div>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-[var(--color-star-blue)] mb-0.5">
-                <Activity size={11} />
-                <span className="text-xs font-mono font-bold">{((agent.calls || 0) / 1000).toFixed(1)}k</span>
-              </div>
-              <div className="text-[9px] text-[var(--color-text-dim)] font-mono">CALLS</div>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-[var(--color-success)] mb-0.5">
-                <TrendingUp size={11} />
-                <span className="text-xs font-mono font-bold">{agent.successRate || 0}%</span>
-              </div>
-              <div className="text-[9px] text-[var(--color-text-dim)] font-mono">SUCCESS</div>
-            </div>
-          </div>
-
-          {/* Price */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-[var(--color-purple-bright)] font-mono font-bold text-sm">
-                {agent.pricing} ETH
+              <span className="px-2.5 py-1 rounded bg-[var(--color-nebula)] border border-[var(--color-border-bright)] text-[var(--color-purple-bright)] text-[10px] font-mono tracking-widest group-hover:bg-[var(--color-purple-core)] group-hover:text-white group-hover:shadow-[0_0_15px_rgba(168,85,247,0.5)] transition-all duration-300">
+                EXECUTE →
               </span>
-              <span className="text-[var(--color-text-dim)] text-[10px] font-mono">/call</span>
             </div>
-            <span className="px-2.5 py-1 rounded bg-[var(--color-nebula)] border border-[var(--color-border-bright)] text-[var(--color-purple-bright)] text-[10px] font-mono tracking-widest">
-              EXECUTE →
-            </span>
           </div>
         </motion.div>
       </Link>
