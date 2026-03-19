@@ -7,8 +7,6 @@ import morgan from 'morgan'
 import config from './config/config.js'
 import { errorHandler } from './middlewares/errorHandler.js'
 import { apiLimiter } from './middlewares/rateLimiter.js'
-
-import contractManager from './blockchain/contracts.js'
 import prisma from './lib/prisma.js'
 
 // Routes
@@ -73,22 +71,14 @@ app.use(errorHandler)
 // ── Start server ───────────────────────────────────────────
 const start = async () => {
   try {
-    // Init contracts
-    await contractManager.init()
-    contractManager.startAllListeners(prisma)
-
-    // Cron jobs have been removed from here
+    // Note: Blockchain listeners removed. 
+    // State is now managed via frontend Draft -> Confirm flow.
 
     app.listen(config.port, () => {
       console.log(`\n🚀 Neural Market API running on port ${config.port}`)
       console.log(`   Environment  : ${config.nodeEnv}`)
-      console.log(`   Database     : Prisma 6 / PostgreSQL`)
-      console.log(
-        `   Blockchain   : ${contractManager.isMock ? 'Mock Mode' : 'Live'}`
-      )
-      console.log(
-        `   Health       : http://localhost:${config.port}/health\n`
-      )
+      console.log(`   Database     : Prisma / MongoDB`)
+      console.log(`   Health       : http://localhost:${config.port}/health\n`)
     })
   } catch (err) {
     console.error('❌ Startup error:', err)

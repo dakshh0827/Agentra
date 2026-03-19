@@ -4,11 +4,17 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
   Tooltip, ResponsiveContainer, CartesianGrid
 } from 'recharts'
-import { BarChart3, TrendingUp, Zap, DollarSign, Activity, ArrowUpRight, Wallet, Sparkles, Clock } from 'lucide-react'
+import { 
+  BarChart3, TrendingUp, Zap, DollarSign, Activity, 
+  Wallet, Sparkles, Clock, ShieldCheck, Cpu 
+} from 'lucide-react'
+import { useAccount, useReadContracts } from 'wagmi'
+import { CHAIN_CONFIG } from '../config/chains.config'
 import MetricBadge from '../components/ui/MetricBadge'
 import LoadingPulse from '../components/ui/LoadingPulse'
+import AgentCard from '../components/ui/AgentCard'
 import { analyticsAPI } from '../api/analytics'
-import { useAuthStore } from '../stores/authStore'
+import { useAgents } from '../hooks/useAgents'
 import { Link } from 'react-router-dom'
 
 /* ── FadeInSection — triggers when scrolled into view ── */
@@ -46,10 +52,16 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Dashboard() {
-  const { walletAddress } = useAuthStore()
+  // Web3 State
+  const { address: walletAddress, isConnected, chain } = useAccount()
+  
+  // App State
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState({ metrics: null, revenueData: [], agentPerf: [], activityFeed: [] })
   const [hoveredMetric, setHoveredMetric] = useState(null)
+  
+  // Fetch all agents to filter owned/purchased
+  const { agents } = useAgents()
 
   useEffect(() => {
     if (!walletAddress) { setLoading(false); return }
@@ -59,9 +71,41 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [walletAddress])
 
-  if (!walletAddress) return (
+  // --- WEB3 AGENT FILTERING ---
+  
+  // 1. Agents created by this user
+  const myAgents = (agents || []).filter(
+    a => a.ownerWallet?.toLowerCase() === walletAddress?.toLowerCase()
+  )
+
+  // 2. Agents purchased by this user (Batch Contract Read)
+  const currentNetwork = CHAIN_CONFIG[chain?.id]
+  const contracts = currentNetwork?.contracts
+  
+  // Find all blockchain agents the user does NOT own
+  const otherBlockchainAgents = (agents || []).filter(
+    a => a.deployMode === 'blockchain' && a.ownerWallet?.toLowerCase() !== walletAddress?.toLowerCase()
+  )
+
+  // Build the batch multicall configuration
+  const accessContracts = otherBlockchainAgents.map(agent => ({
+    address: contracts?.Agentra?.address,
+    abi: contracts?.Agentra?.abi,
+    functionName: 'hasAccess',
+    args: [agent.contractAgentId || 1, walletAddress],
+  }))
+
+  // Execute batch read
+  const { data: accessResults } = useReadContracts({
+    contracts: accessContracts,
+    query: { enabled: !!contracts && !!walletAddress && otherBlockchainAgents.length > 0 }
+  })
+
+  // Filter down to only the agents where hasAccess returned true
+  const purchasedAgents = otherBlockchainAgents.filter((agent, i) => accessResults?.[i]?.result)
+
+  if (!isConnected || !walletAddress) return (
     <div className="relative min-h-[80vh] flex items-center justify-center p-6">
-      {/* Ambient glows */}
       <div className="fixed top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full pointer-events-none"
         style={{ background: 'radial-gradient(ellipse, rgba(124,58,237,0.06) 0%, transparent 70%)' }} />
       
@@ -79,7 +123,7 @@ export default function Dashboard() {
           </div>
           <h2 className="text-2xl font-display font-bold text-[var(--color-text-primary)] mb-3">Connect Wallet</h2>
           <p className="text-[var(--color-text-muted)] text-sm mb-6 leading-relaxed">
-            Connect your wallet to view your personal analytics, revenue, and agent performance.
+            Connect your wallet via the top bar to view your personal analytics, revenue, and agent performance.
           </p>
           <div className="flex flex-wrap justify-center gap-2">
             {['Revenue Tracking', 'Agent Metrics', 'Activity Feed'].map(tag => (
@@ -100,11 +144,10 @@ export default function Dashboard() {
   const agentPerf = data.agentPerf || []
   const activityFeed = data.activityFeed || []
 
-  // Cleaned up metric cards - entirely reliant on actual backend data without faked percentages
   const metricCards = [
-    { label: 'TOTAL REVENUE', value: `${parseFloat(metrics.totalRevenue || 0).toFixed(4)} ETH`, color: 'green', icon: DollarSign, sublabel: 'All time earnings', gradient: 'from-emerald-500/15 to-transparent' },
+    { label: 'TOTAL REVENUE', value: `${parseFloat(metrics.totalRevenue || 0).toFixed(4)} AGT`, color: 'green', icon: DollarSign, sublabel: 'All time earnings', gradient: 'from-emerald-500/15 to-transparent' },
     { label: 'TOTAL CALLS', value: (metrics.totalCalls || 0).toLocaleString(), color: 'blue', icon: Activity, sublabel: 'Total executions', gradient: 'from-blue-500/15 to-transparent' },
-    { label: 'MY AGENTS', value: metrics.agentsCount || 0, color: 'purple', icon: Zap, sublabel: `${metrics.activeAgentsCount || 0} active`, gradient: 'from-purple-500/15 to-transparent' },
+    { label: 'MY AGENTS', value: myAgents.length || 0, color: 'purple', icon: Zap, sublabel: 'Deployed on network', gradient: 'from-purple-500/15 to-transparent' },
     { label: 'SUCCESS RATE', value: `${(metrics.successRate || 0).toFixed(1)}%`, color: 'yellow', icon: TrendingUp, sublabel: 'Avg across agents', gradient: 'from-amber-500/15 to-transparent' },
   ]
 
@@ -118,18 +161,8 @@ export default function Dashboard() {
 
       <div className="relative z-10 p-5 lg:p-8 max-w-7xl mx-auto">
         {/* Header */}
-        <motion.div 
-          initial={{ opacity: 0, y: -16 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          transition={{ duration: 0.5 }} 
-          className="mb-8"
-        >
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.1, duration: 0.4 }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[rgba(52,211,153,0.25)] bg-[rgba(52,211,153,0.06)] mb-4"
-          >
+        <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-8">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1, duration: 0.4 }} className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-[rgba(52,211,153,0.25)] bg-[rgba(52,211,153,0.06)] mb-4">
             <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-success)] pulse-dot" />
             <span className="text-[10px] font-mono text-[var(--color-success)] tracking-[0.2em]">ANALYTICS DASHBOARD — LIVE</span>
           </motion.div>
@@ -142,39 +175,27 @@ export default function Dashboard() {
           </p>
         </motion.div>
 
-        {/* Metric cards — enhanced with hover effects */}
+        {/* Metric cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
           {metricCards.map((m, i) => (
-            <motion.div 
-              key={m.label} 
-              initial={{ opacity: 0, y: 16 }} 
-              animate={{ opacity: 1, y: 0 }} 
-              transition={{ delay: 0.1 + i * 0.05 }}
-              onMouseEnter={() => setHoveredMetric(m.label)}
-              onMouseLeave={() => setHoveredMetric(null)}
-              className="group"
-            >
-              <div className={`glass-card-landing rounded-xl p-4 sm:p-5 relative overflow-hidden transition-all duration-300 ${
-                hoveredMetric === m.label ? 'scale-[1.02]' : ''
-              }`}>
+            <motion.div key={m.label} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }} onMouseEnter={() => setHoveredMetric(m.label)} onMouseLeave={() => setHoveredMetric(null)} className="group">
+              <div className={`glass-card-landing rounded-xl p-4 sm:p-5 relative overflow-hidden transition-all duration-300 ${hoveredMetric === m.label ? 'scale-[1.02]' : ''}`}>
                 <div className={`absolute inset-0 bg-gradient-to-br ${m.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-                <div className="relative z-10">
-                  <MetricBadge {...m} />
-                </div>
+                <div className="relative z-10"><MetricBadge {...m} /></div>
               </div>
             </motion.div>
           ))}
         </div>
 
         {/* Main charts grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
           {/* Revenue Chart */}
           <FadeInSection className="lg:col-span-2">
             <div className="glass-card-landing rounded-xl p-5 sm:p-6 h-full">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="font-display font-bold text-[var(--color-text-primary)] text-base sm:text-lg">Revenue Chart</h3>
-                  <p className="text-[var(--color-text-dim)] text-[10px] font-mono tracking-wider mt-0.5">ETH EARNINGS OVER TIME</p>
+                  <p className="text-[var(--color-text-dim)] text-[10px] font-mono tracking-wider mt-0.5">AGT EARNINGS OVER TIME</p>
                 </div>
               </div>
               {revenueData.length > 0 ? (
@@ -190,7 +211,7 @@ export default function Dashboard() {
                     <XAxis dataKey="day" stroke="rgba(124,58,237,0.3)" tick={{ fontSize: 10, fontFamily: 'Space Mono', fill: 'var(--color-text-dim)' }} />
                     <YAxis stroke="rgba(124,58,237,0.3)" tick={{ fontSize: 10, fontFamily: 'Space Mono', fill: 'var(--color-text-dim)' }} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Area type="monotone" dataKey="eth" stroke="#a855f7" strokeWidth={2} fill="url(#revGrad)" name="ETH" />
+                    <Area type="monotone" dataKey="eth" stroke="#a855f7" strokeWidth={2} fill="url(#revGrad)" name="AGT" />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
@@ -212,14 +233,7 @@ export default function Dashboard() {
               </div>
               <div className="space-y-3 overflow-y-auto max-h-52 pr-1 custom-scrollbar">
                 {activityFeed.length > 0 ? activityFeed.map((item, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ opacity: 0, x: 12 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + i * 0.05 }}
-                    whileHover={{ x: 4 }}
-                    className="flex items-start gap-3 pb-3 border-b border-[var(--color-border)] last:border-0 cursor-default group"
-                  >
+                  <motion.div key={i} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + i * 0.05 }} whileHover={{ x: 4 }} className="flex items-start gap-3 pb-3 border-b border-[var(--color-border)] last:border-0 cursor-default group">
                     <div className="w-2 h-2 rounded-full mt-1.5 shrink-0 bg-[var(--color-purple-bright)] group-hover:scale-125 transition-transform" />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs text-[var(--color-text-secondary)] group-hover:text-[var(--color-text-primary)] transition-colors truncate">{item.text}</div>
@@ -237,12 +251,57 @@ export default function Dashboard() {
           </FadeInSection>
         </div>
 
-        {/* Agent Performance Chart */}
-        <FadeInSection delay={0.15}>
-          <div className="glass-card-landing rounded-xl p-5 sm:p-6">
+        {/* ── AGENT GRIDS (Created & Purchased) ── */}
+        <FadeInSection delay={0.2}>
+          <div className="space-y-10 mb-10">
+            {/* My Deployed Agents */}
+            <div>
+              <div className="flex items-center gap-2 mb-5">
+                <Cpu size={20} className="text-[var(--color-purple-bright)]" />
+                <h3 className="font-display font-bold text-[var(--color-text-primary)] text-xl sm:text-2xl">My Deployed Agents</h3>
+              </div>
+              {myAgents.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+                  {myAgents.map((agent, i) => (
+                    <AgentCard key={agent._id || agent.id} agent={agent} index={i} />
+                  ))}
+                </div>
+              ) : (
+                <div className="glass-card-landing rounded-xl p-10 text-center border-dashed border border-[rgba(124,58,237,0.3)] bg-[rgba(124,58,237,0.02)]">
+                  <div className="text-[var(--color-text-dim)] font-mono text-xs tracking-widest mb-3">NO AGENTS DEPLOYED YET</div>
+                  <Link to="/deploy" className="text-[var(--color-purple-bright)] text-xs font-mono hover:underline">LAUNCH YOUR FIRST AGENT →</Link>
+                </div>
+              )}
+            </div>
+
+            {/* Purchased / Unlocked Agents */}
+            <div>
+              <div className="flex items-center gap-2 mb-5">
+                <ShieldCheck size={20} className="text-[var(--color-success)]" />
+                <h3 className="font-display font-bold text-[var(--color-text-primary)] text-xl sm:text-2xl">Unlocked Access</h3>
+              </div>
+              {purchasedAgents.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-5">
+                  {purchasedAgents.map((agent, i) => (
+                    <AgentCard key={agent._id || agent.id} agent={agent} index={i} />
+                  ))}
+                </div>
+              ) : (
+                <div className="glass-card-landing rounded-xl p-10 text-center border-dashed border border-[rgba(52,211,153,0.3)] bg-[rgba(52,211,153,0.02)]">
+                  <div className="text-[var(--color-text-dim)] font-mono text-xs tracking-widest mb-3">NO ON-CHAIN AGENTS PURCHASED</div>
+                  <Link to="/marketplace" className="text-[var(--color-success)] text-xs font-mono hover:underline">EXPLORE MARKETPLACE →</Link>
+                </div>
+              )}
+            </div>
+          </div>
+        </FadeInSection>
+
+        {/* Agent Performance Chart (Original) */}
+        <FadeInSection delay={0.25}>
+          <div className="glass-card-landing rounded-xl p-5 sm:p-6 mb-8">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="font-display font-bold text-[var(--color-text-primary)] text-base sm:text-lg">Agent Performance</h3>
+                <h3 className="font-display font-bold text-[var(--color-text-primary)] text-base sm:text-lg">Performance Metrics</h3>
                 <p className="text-[var(--color-text-dim)] text-[10px] font-mono tracking-wider mt-0.5">CALLS VS REVENUE BY AGENT</p>
               </div>
               <div className="flex items-center gap-4 text-[10px] font-mono">

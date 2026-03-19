@@ -1,7 +1,7 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 import { Link } from 'react-router-dom'
-import { Zap, Star, TrendingUp, Activity, Tag, Circle } from 'lucide-react'
+import { Zap, Star, TrendingUp, Activity, Tag, Shield } from 'lucide-react'
 import clsx from 'clsx'
 
 const categoryColors = {
@@ -22,6 +22,7 @@ const statusConfig = {
 
 export default function AgentCard({ agent, index = 0 }) {
   const status = statusConfig[agent.status] || statusConfig.active
+  const isBlockchain = agent.deployMode === 'blockchain'
 
   return (
     <motion.div
@@ -57,12 +58,19 @@ export default function AgentCard({ agent, index = 0 }) {
                   <h3 className="font-display font-bold text-[var(--color-text-primary)] text-sm tracking-wide leading-tight group-hover:text-[var(--color-purple-pale)] transition-colors duration-300">
                     {agent.name}
                   </h3>
-                  <span className={clsx(
-                    'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border mt-0.5',
-                    categoryColors[agent.category] || categoryColors.Other
-                  )}>
-                    {agent.category}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={clsx(
+                      'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono border',
+                      categoryColors[agent.category] || categoryColors.Other
+                    )}>
+                      {agent.category}
+                    </span>
+                    {isBlockchain && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-[rgba(124,58,237,0.1)] border border-[rgba(124,58,237,0.2)] text-[9px] font-mono text-[var(--color-purple-bright)]">
+                        <Shield size={8} /> ON-CHAIN
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
@@ -117,9 +125,9 @@ export default function AgentCard({ agent, index = 0 }) {
             <div className="flex items-center justify-between">
               <div className="flex items-baseline gap-1.5">
                 <span className="text-[var(--color-purple-bright)] font-mono font-bold text-sm drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]">
-                  {agent.pricing} ETH
+                  {agent.pricing} AGT
                 </span>
-                <span className="text-[var(--color-text-dim)] text-[10px] font-mono">/call</span>
+                <span className="text-[var(--color-text-dim)] text-[10px] font-mono">/mo</span>
               </div>
               <span className="px-2.5 py-1 rounded bg-[var(--color-nebula)] border border-[var(--color-border-bright)] text-[var(--color-purple-bright)] text-[10px] font-mono tracking-widest group-hover:bg-[var(--color-purple-core)] group-hover:text-white group-hover:shadow-[0_0_15px_rgba(168,85,247,0.5)] transition-all duration-300">
                 EXECUTE →

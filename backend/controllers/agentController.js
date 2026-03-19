@@ -1,6 +1,6 @@
 import agentService from '../services/agentService.js'
-import blockchainService from '../services/blockchainService.js'
-import { asyncHandler, createError } from '../middlewares/errorHandler.js'
+import prisma from '../lib/prisma.js' // Added to handle direct draft deletion
+import { asyncHandler } from '../middlewares/errorHandler.js'
 import { z } from 'zod'
 
 // ── Validation schemas ────────────────────────────────────
@@ -10,10 +10,11 @@ const deployBaseSchema = z.object({
   description: z.string().min(10).max(1000).optional(),
   category: z.enum(['Analysis', 'Development', 'Security', 'Data', 'NLP', 'Web3', 'Other']),
   tags: z.array(z.string().max(32)).max(10).optional(),
-  pricing: z.number().min(0).max(100),
+  pricing: z.number().min(0),
   mcpSchema: z.record(z.string(), z.unknown()).optional(),
   deployMode: z.enum(['database', 'blockchain']).default('blockchain'),
   ownerWallet: z.string().optional(),
+  status: z.string().optional(), // Allow status to be passed from frontend
 })
 
 const blockchainDeploySchema = deployBaseSchema.extend({
@@ -41,7 +42,7 @@ const getAgents = asyncHandler(async (req, res) => {
   const result = await agentService.getAgents({
     category: category === 'all' ? undefined : category,
     search,
-    status: (!status || status === 'all') ? undefined : status,
+    status: (!status || status === 'all') ? 'active' : status, // Only show active agents
     sortBy: sortBy || 'score',
     page: parseInt(page) || 1,
     limit: Math.min(parseInt(limit) || 20, 100),
@@ -56,8 +57,9 @@ const getAgentById = asyncHandler(async (req, res) => {
   res.json(agent)
 })
 
+// 1. DEPLOY (Creates ACTIVE for DB, DRAFT for Blockchain)
 const deployAgent = asyncHandler(async (req, res) => {
-  const { deployMode = 'blockchain' } = req.body
+  const { deployMode = 'blockchain', status } = req.body
 
   let data
   try {
@@ -70,30 +72,66 @@ const deployAgent = asyncHandler(async (req, res) => {
     throw err
   }
 
-  if (deployMode === 'blockchain' && req.query.skipValidation !== 'true' && data.endpoint) {
-    const validation = await agentService.validateEndpoint(data.endpoint)
-    if (!validation.valid) {
-      return res.status(400).json({
-        error: 'Endpoint validation failed',
-        details: validation.error,
-      })
+  // Determine actual status
+  const isDraft = deployMode === 'blockchain' && status === 'DRAFT'
+  const finalStatus = isDraft ? 'draft' : 'active'
+
+  // Pass custom data to your existing service
+  const agentPayload = { ...data, status: finalStatus, deployMode }
+  const agent = await agentService.createAgent(agentPayload, req.walletAddress)
+
+  // Generate metadataURI for the smart contract (In prod, upload to IPFS here)
+  const metadataURI = `https://api.agentra.io/metadata/${agent.id}`
+  
+  // Update the draft with the URI
+  const updatedAgent = await prisma.agent.update({
+    where: { id: agent.id },
+    data: { metadataUri: metadataURI }
+  })
+
+  res.status(201).json({ ...updatedAgent, metadataURI })
+})
+
+// 2. CONFIRM DEPLOY (State Machine Resolution)
+const confirmDeploy = asyncHandler(async (req, res) => {
+  const { txHash } = req.body
+  const { id } = req.params
+
+  // In production, use ethers/viem here to read the blockchain receipt using txHash 
+  // and extract the exact `agentId` from the emitted event. 
+  // For now, we mock the contractAgentId.
+  const mockContractAgentId = Math.floor(Math.random() * 10000)
+
+  const agent = await prisma.agent.update({
+    where: { 
+      id: id,
+      ownerWallet: req.walletAddress // Security check
+    },
+    data: {
+      status: 'active',
+      txHash: txHash,
+      contractAgentId: mockContractAgentId,
+      isVerified: true
     }
-  }
+  })
 
-  const agent = await agentService.createAgent(data, req.walletAddress)
+  res.json({ success: true, agent })
+})
 
-  if (deployMode === 'blockchain') {
-    blockchainService.registerAgentOnChain(
-      agent.agentId,
-      req.walletAddress,
-      agent.metadataUri,
-      agent.pricing
-    ).catch(err => console.warn('[AGENT] On-chain registration failed (non-blocking):', err.message))
-  } else {
-    console.log(`[AGENT] Database-only deploy for agent: ${agent.agentId} — skipping on-chain registration`)
-  }
+// 3. CANCEL DRAFT (Rollback)
+const cancelDraft = asyncHandler(async (req, res) => {
+  const { id } = req.params
 
-  res.status(201).json(agent)
+  // Only delete if it's actually a draft and belongs to the user
+  await prisma.agent.delete({
+    where: { 
+      id: id,
+      status: 'draft',
+      ownerWallet: req.walletAddress
+    }
+  })
+
+  res.json({ success: true, message: 'Draft cleared' })
 })
 
 const updateAgent = asyncHandler(async (req, res) => {
@@ -122,11 +160,6 @@ const searchAgents = asyncHandler(async (req, res) => {
 })
 
 export {
-  getAgents,
-  getAgentById,
-  deployAgent,
-  updateAgent,
-  deleteAgent,
-  validateEndpoint,
-  searchAgents,
+  getAgents, getAgentById, deployAgent, confirmDeploy, cancelDraft,
+  updateAgent, deleteAgent, validateEndpoint, searchAgents,
 }

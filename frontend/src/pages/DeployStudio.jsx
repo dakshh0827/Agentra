@@ -1,6 +1,9 @@
 import React, { useState, useRef } from 'react'
 import { motion, AnimatePresence, useInView } from 'framer-motion'
 import { Upload, ChevronRight, Check, Globe, Tag, DollarSign, Zap, Database, Link2, Sparkles, Rocket, AlertTriangle, Wallet } from 'lucide-react'
+import { useAccount, useWriteContract, usePublicClient } from 'wagmi'
+import { parseEther } from 'viem'
+import { CHAIN_CONFIG } from '../config/chains.config'
 import GlassCard from '../components/ui/GlassCard'
 import NeonButton from '../components/ui/NeonButton'
 import { agentsAPI } from '../api/agents'
@@ -62,10 +65,14 @@ export default function DeployStudio() {
   const [step, setStep] = useState(1)
   const [deploying, setDeploying] = useState(false)
   const [deployed, setDeployed] = useState(false)
-  const { isConnected, walletAddress } = useAuthStore()
+  
+  // Auth & Web3 State
+  const { chain, address: walletAddress, isConnected } = useAccount()
+  const publicClient = usePublicClient()
+  const { writeContractAsync } = useWriteContract()
 
   const [form, setForm] = useState({
-    deployMode: '',       // 'database' | 'blockchain'
+    deployMode: '',       
     name: '',
     category: '',
     endpoint: '',
@@ -81,8 +88,10 @@ export default function DeployStudio() {
   const isDatabase = form.deployMode === 'database'
 
   const handleDeploy = async () => {
-    if (!isConnected) return   // wallet always required for identity
+    if (!isConnected) return
     setDeploying(true)
+    let draftId = null // Track draft ID for potential rollback
+
     try {
       let parsedSchema = null
       if (form.mcpSchema) {
@@ -90,7 +99,6 @@ export default function DeployStudio() {
         catch { throw new Error('Invalid MCP Schema JSON') }
       }
 
-      // ownerWallet is ALWAYS included — used for dashboard, identity, attribution
       const payload = {
         name: form.name,
         category: form.category,
@@ -99,22 +107,83 @@ export default function DeployStudio() {
         description: form.description,
         tags: form.tags.split(',').map(t => t.trim()).filter(Boolean),
         pricing: parseFloat(form.pricing) || 0,
-        ownerWallet: walletAddress,   // always saved to DB regardless of mode
-        deployMode: form.deployMode,  // tells backend: also register on-chain or DB only
+        ownerWallet: walletAddress,
+        deployMode: form.deployMode,
       }
 
-      await agentsAPI.deploy(payload)
+      // ==========================================
+      // FLOW 1: DATABASE ONLY (Off-chain)
+      // ==========================================
+      if (isDatabase) {
+        await agentsAPI.deploy(payload)
+        setDeployed(true)
+        return
+      }
+
+      // ==========================================
+      // FLOW 2: BLOCKCHAIN + DB (State Machine)
+      // ==========================================
+      const currentNetwork = CHAIN_CONFIG[chain?.id]
+      if (!currentNetwork || !currentNetwork.contracts) {
+        throw new Error("Smart contracts not found for the current network. Please switch chains.")
+      }
+      
+      const { Agentra, AgentToken } = currentNetwork.contracts
+
+      // Step 1: Create DB DRAFT to get Metadata URI
+      // Backend should return { id: "123", metadataURI: "ipfs://..." }
+      const draftRes = await agentsAPI.deploy({ ...payload, status: 'DRAFT' })
+      draftId = draftRes.data.id
+      const metadataURI = draftRes.data.metadataURI || `ipfs://pending-${draftId}`
+
+      // Step 2: Determine Tier & Listing Fee
+      // Mapping frontend pricing to contract Enum (0: Standard, 1: Pro, 2: Enterprise)
+      let tier = 0; let feeAmount = "50"; 
+      if (form.pricing === '0.05') { tier = 1; feeAmount = "150"; }
+      if (form.pricing === '0.15') { tier = 2; feeAmount = "500"; }
+      const listingFee = parseEther(feeAmount)
+
+      // Step 3: Prompt user to Approve AGT Token spend
+      const approveTx = await writeContractAsync({
+        address: AgentToken.address,
+        abi: AgentToken.abi,
+        functionName: 'approve',
+        args: [Agentra.address, listingFee]
+      })
+      // Wait for approval block confirmation
+      await publicClient.waitForTransactionReceipt({ hash: approveTx })
+
+      // Step 4: Prompt user to Deploy Agent
+      const monthlyPriceWei = parseEther(form.pricing || "0")
+      const deployTx = await writeContractAsync({
+        address: Agentra.address,
+        abi: Agentra.abi,
+        functionName: 'deployAgent',
+        args: [tier, monthlyPriceWei, metadataURI]
+      })
+      // Wait for deployment block confirmation
+      await publicClient.waitForTransactionReceipt({ hash: deployTx })
+
+      // Step 5: Finalize! Tell backend tx succeeded to mark as ACTIVE
+      await agentsAPI.confirmDeploy(draftId, deployTx)
       setDeployed(true)
+
     } catch (error) {
-      alert(`Deploy failed: ${error.message}`)
+      console.error(error)
+      // THE ROLLBACK: If blockchain flow fails, nuke the ghost data
+      if (draftId && isBlockchain) {
+        await agentsAPI.cancelDraft(draftId).catch(err => console.error("Rollback failed:", err))
+      }
+      
+      // Wagmi throws 'shortMessage' for cleaner user errors (e.g., "User rejected request")
+      alert(`Deploy failed: ${error.shortMessage || error.message}`)
     } finally {
       setDeploying(false)
     }
   }
 
-  // Wallet always required (for identity), plus mode must be selected
   const canProceedFromStep1 = form.deployMode && isConnected
-  const canDeploy = isConnected && form.name && form.category
+  const canDeploy = isConnected && form.name && form.category && form.pricing
 
   return (
     <div className="relative min-h-screen">
@@ -125,7 +194,7 @@ export default function DeployStudio() {
         style={{ background: 'radial-gradient(ellipse, rgba(52,211,153,0.05) 0%, transparent 70%)' }} />
 
       <div className="relative z-10 p-5 lg:p-8 max-w-4xl mx-auto">
-        {/* Header — Enhanced */}
+        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-8">
           <div className="flex items-center gap-2.5 mb-3">
             <div className="w-9 h-9 rounded-xl bg-[rgba(124,58,237,0.1)] border border-[rgba(124,58,237,0.25)] flex items-center justify-center">
@@ -139,7 +208,7 @@ export default function DeployStudio() {
           <p className="text-[var(--color-text-muted)] text-sm sm:text-base mt-2 max-w-lg">Launch your autonomous AI agent on the neural marketplace</p>
         </motion.div>
 
-        {/* Step indicator — Enhanced */}
+        {/* Step indicator */}
         <FadeInSection className="mb-8">
           <div className="glass-card-landing rounded-2xl p-4 sm:p-5">
             <div className="flex items-center gap-0 overflow-x-auto pb-1 scrollbar-hide">
@@ -197,7 +266,7 @@ export default function DeployStudio() {
           </div>
         </FadeInSection>
 
-        {/* Step content — Enhanced */}
+        {/* Step content */}
         <AnimatePresence mode="wait">
           <motion.div
             key={step}
@@ -222,7 +291,6 @@ export default function DeployStudio() {
                   </p>
                 </div>
 
-                {/* Wallet always required — show warning if not connected */}
                 {!isConnected && (
                   <motion.div
                     initial={{ opacity: 0, y: 6 }}
@@ -241,7 +309,6 @@ export default function DeployStudio() {
                   </motion.div>
                 )}
 
-                {/* Mode cards — Enhanced */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                   {/* Database only */}
                   <motion.button
@@ -285,15 +352,6 @@ export default function DeployStudio() {
                       <p className="text-xs leading-relaxed text-[var(--color-text-muted)] mb-4">
                         Agent and wallet address stored in database only. Full marketplace access — execution, ratings, leaderboard, dashboard — with no gas fees.
                       </p>
-                      <div className="flex flex-wrap gap-2">
-                        {['No gas fees', 'Instant deploy', 'Dashboard tracked'].map(tag => (
-                          <span key={tag} className={`text-[9px] font-mono px-2.5 py-1 rounded-lg border transition-colors ${
-                            isDatabase
-                              ? 'border-[rgba(52,211,153,0.25)] text-[var(--color-success)] bg-[rgba(52,211,153,0.06)]'
-                              : 'border-[var(--color-border)] text-[var(--color-text-dim)]'
-                          }`}>{tag}</span>
-                        ))}
-                      </div>
                     </div>
                   </motion.button>
 
@@ -339,20 +397,10 @@ export default function DeployStudio() {
                       <p className="text-xs leading-relaxed text-[var(--color-text-muted)] mb-4">
                         Agent registered on-chain via smart contract and also saved to the database. Enables trustless payments and immutable ownership.
                       </p>
-                      <div className="flex flex-wrap gap-2">
-                        {['On-chain payments', 'Immutable record', 'Gas required'].map(tag => (
-                          <span key={tag} className={`text-[9px] font-mono px-2.5 py-1 rounded-lg border transition-colors ${
-                            isBlockchain
-                              ? 'border-[rgba(124,58,237,0.25)] text-[var(--color-purple-bright)] bg-[rgba(124,58,237,0.06)]'
-                              : 'border-[var(--color-border)] text-[var(--color-text-dim)]'
-                          }`}>{tag}</span>
-                        ))}
-                      </div>
                     </div>
                   </motion.button>
                 </div>
 
-                {/* Confirmation badge — Enhanced */}
                 {form.deployMode && isConnected && (
                   <motion.div
                     initial={{ opacity: 0, y: 6, scale: 0.95 }}
@@ -373,7 +421,7 @@ export default function DeployStudio() {
               </div>
             )}
 
-            {/* ── STEP 2: IDENTITY — Enhanced ── */}
+            {/* ── STEP 2: IDENTITY ── */}
             {step === 2 && (
               <div className="space-y-6">
                 <h2 className="font-display font-bold text-xl sm:text-2xl text-[var(--color-text-primary)] mb-6 flex items-center gap-3">
@@ -404,7 +452,7 @@ export default function DeployStudio() {
               </div>
             )}
 
-            {/* ── STEP 3: ENDPOINT — Enhanced ── */}
+            {/* ── STEP 3: ENDPOINT ── */}
             {step === 3 && (
               <div className="space-y-6">
                 <h2 className="font-display font-bold text-xl sm:text-2xl text-[var(--color-text-primary)] mb-6 flex items-center gap-3">
@@ -425,19 +473,10 @@ export default function DeployStudio() {
                   </div>
                   <NeonButton variant="ghost" size="sm" onClick={() => update('testPassed', true)}>TEST CONNECTION</NeonButton>
                 </div>
-                {form.testPassed && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2.5 text-[var(--color-success)] text-xs font-mono p-3 rounded-lg bg-[rgba(52,211,153,0.06)] border border-[rgba(52,211,153,0.2)]"
-                  >
-                    <Check size={15} /> Endpoint reachable. Schema valid.
-                  </motion.div>
-                )}
               </div>
             )}
 
-            {/* ── STEP 4: METADATA — Enhanced ── */}
+            {/* ── STEP 4: METADATA ── */}
             {step === 4 && (
               <div className="space-y-6">
                 <h2 className="font-display font-bold text-xl sm:text-2xl text-[var(--color-text-primary)] mb-6 flex items-center gap-3">
@@ -449,7 +488,7 @@ export default function DeployStudio() {
               </div>
             )}
 
-            {/* ── STEP 5: PRICING — Enhanced ── */}
+            {/* ── STEP 5: PRICING ── */}
             {step === 5 && (
               <div className="space-y-6">
                 <div>
@@ -457,18 +496,12 @@ export default function DeployStudio() {
                     <DollarSign size={20} className="text-[var(--color-purple-bright)]" />
                     Pricing Model
                   </h2>
-                  {isDatabase && (
-                    <p className="text-[var(--color-text-muted)] text-xs font-mono leading-relaxed">
-                      Pricing is recorded in the database. Payments are handled off-chain or manually between parties.
-                    </p>
-                  )}
                 </div>
-                <InputField label="PRICE PER CALL (ETH)" field="pricing" type="number" placeholder="0.05" form={form} update={update} />
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
-                    { label: 'MICRO', value: '0.001', desc: 'High volume', color: 'blue' },
-                    { label: 'STANDARD', value: '0.05', desc: 'Balanced', color: 'purple' },
-                    { label: 'PREMIUM', value: '0.15', desc: 'Specialized', color: 'amber' },
+                    { label: 'MICRO', value: '0.001', desc: 'Standard Agent', fee: '50 AGT Fee' },
+                    { label: 'STANDARD', value: '0.05', desc: 'Professional Agent', fee: '150 AGT Fee' },
+                    { label: 'PREMIUM', value: '0.15', desc: 'Enterprise Agent', fee: '500 AGT Fee' },
                   ].map(tier => (
                     <motion.button 
                       key={tier.value} 
@@ -485,22 +518,24 @@ export default function DeployStudio() {
                         <div className="absolute inset-0 bg-gradient-to-br from-[rgba(124,58,237,0.08)] to-transparent pointer-events-none" />
                       )}
                       <div className="relative z-10">
-                        <div className="text-[10px] font-mono font-bold mb-2 tracking-widest">{tier.label}</div>
-                        <div className="text-2xl font-display font-bold">{tier.value} <span className="text-sm opacity-60">ETH</span></div>
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="text-[10px] font-mono font-bold tracking-widest">{tier.label}</div>
+                          {isBlockchain && (
+                            <div className="text-[8px] font-mono px-1.5 py-0.5 rounded bg-[var(--color-purple-core)]/20 text-[var(--color-purple-bright)]">
+                              {tier.fee}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-2xl font-display font-bold">{tier.value} <span className="text-sm opacity-60">ETH/mo</span></div>
                         <div className="text-[10px] opacity-50 mt-1">{tier.desc}</div>
                       </div>
                     </motion.button>
                   ))}
                 </div>
-                <div className="p-4 rounded-xl bg-black/30 border border-[var(--color-border)] text-[var(--color-text-dim)] text-[11px] font-mono">
-                  {isBlockchain
-                    ? '📊 Platform fee: 5% per transaction. Revenue via smart contract.'
-                    : '📊 Platform fee: 5% per transaction. Revenue tracked in database.'}
-                </div>
               </div>
             )}
 
-            {/* ── STEP 6: REVIEW & DEPLOY — Enhanced ── */}
+            {/* ── STEP 6: REVIEW & DEPLOY ── */}
             {step === 6 && (
               <div className="space-y-6">
                 <h2 className="font-display font-bold text-xl sm:text-2xl text-[var(--color-text-primary)] mb-6 flex items-center gap-3">
@@ -515,7 +550,7 @@ export default function DeployStudio() {
                     { label: 'NAME', value: form.name || '—' },
                     { label: 'CATEGORY', value: form.category || '—' },
                     { label: 'ENDPOINT', value: form.endpoint || '—' },
-                    { label: 'PRICING', value: form.pricing ? `${form.pricing} ETH/call` : '—' },
+                    { label: 'PRICING', value: form.pricing ? `${form.pricing} ETH/mo` : '—' },
                   ].map((row, i) => (
                     <motion.div 
                       key={row.label} 
@@ -534,18 +569,6 @@ export default function DeployStudio() {
                   ))}
                 </div>
 
-                {/* Note about wallet storage */}
-                <div className="flex items-start gap-3 p-4 rounded-xl bg-[rgba(124,58,237,0.05)] border border-[rgba(124,58,237,0.2)]">
-                  <div className="w-8 h-8 rounded-lg bg-[rgba(124,58,237,0.1)] flex items-center justify-center shrink-0">
-                    <Database size={14} className="text-[var(--color-purple-bright)]" />
-                  </div>
-                  <p className="text-[var(--color-text-muted)] text-xs leading-relaxed">
-                    Your wallet address is always saved to the database as the agent owner.
-                    This powers your dashboard, revenue tracking, and agent attribution regardless of deploy mode.
-                  </p>
-                </div>
-
-                {/* Wallet not connected guard */}
                 {!isConnected && (
                   <motion.div 
                     initial={{ opacity: 0, y: 6 }}
@@ -575,7 +598,7 @@ export default function DeployStudio() {
                           className="w-full justify-center py-4 text-sm"
                         >
                           <Database size={17} />
-                          SAVE TO DATABASE
+                          {deploying ? 'SAVING...' : 'SAVE TO DATABASE'}
                         </NeonButton>
                       </motion.div>
                     )}
@@ -589,7 +612,7 @@ export default function DeployStudio() {
                           className="w-full justify-center py-4 text-sm"
                         >
                           <Link2 size={17} />
-                          {isConnected ? '⚡ DEPLOY ON-CHAIN' : 'CONNECT WALLET TO DEPLOY'}
+                          {deploying ? 'AWAITING WALLET TX...' : (isConnected ? '⚡ DEPLOY ON-CHAIN (2 TXs)' : 'CONNECT WALLET TO DEPLOY')}
                         </NeonButton>
                       </motion.div>
                     )}
@@ -605,10 +628,6 @@ export default function DeployStudio() {
                         : 'bg-[rgba(124,58,237,0.08)] border-[rgba(124,58,237,0.35)]'
                     }`}
                   >
-                    {/* Success glow */}
-                    <div className={`absolute inset-0 pointer-events-none ${
-                      isDatabase ? 'bg-gradient-to-br from-[rgba(52,211,153,0.1)] to-transparent' : 'bg-gradient-to-br from-[rgba(124,58,237,0.1)] to-transparent'
-                    }`} />
                     <div className="relative z-10">
                       <motion.div
                         initial={{ scale: 0 }}
@@ -623,12 +642,7 @@ export default function DeployStudio() {
                       <div className={`font-display font-bold text-xl sm:text-2xl mb-2 ${isDatabase ? 'text-[var(--color-success)]' : 'text-[var(--color-purple-bright)]'}`}>
                         AGENT {isDatabase ? 'SAVED' : 'DEPLOYED'}
                       </div>
-                      <div className="text-[var(--color-text-muted)] text-xs font-mono tracking-widest mb-4">
-                        {isDatabase
-                          ? 'STORED IN DATABASE · MARKETPLACE READY · DASHBOARD ACTIVE'
-                          : 'ON-CHAIN · DATABASE SYNCED · DASHBOARD ACTIVE'}
-                      </div>
-                      <div className="text-[var(--color-text-dim)] text-[11px] font-mono px-3 py-2 rounded-lg bg-black/30 border border-[var(--color-border)] inline-block">
+                      <div className="text-[var(--color-text-dim)] text-[11px] font-mono px-3 py-2 rounded-lg bg-black/30 border border-[var(--color-border)] inline-block mt-4">
                         OWNER: {walletAddress?.slice(0, 18)}...
                       </div>
                     </div>
@@ -641,12 +655,12 @@ export default function DeployStudio() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Navigation — Enhanced */}
+        {/* Navigation */}
         {!deployed && (
           <FadeInSection delay={0.1}>
             <div className="flex justify-between mt-6 gap-4">
               <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                <NeonButton variant="ghost" onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1}>
+                <NeonButton variant="ghost" onClick={() => setStep(s => Math.max(1, s - 1))} disabled={step === 1 || deploying}>
                   ← BACK
                 </NeonButton>
               </motion.div>
@@ -655,7 +669,7 @@ export default function DeployStudio() {
                   <NeonButton
                     icon={ChevronRight}
                     onClick={() => setStep(s => Math.min(6, s + 1))}
-                    disabled={step === 1 && !canProceedFromStep1}
+                    disabled={(step === 1 && !canProceedFromStep1) || deploying}
                   >
                     NEXT STEP
                   </NeonButton>
@@ -663,23 +677,6 @@ export default function DeployStudio() {
               )}
             </div>
           </FadeInSection>
-        )}
-
-        {/* Step 1 hints — Enhanced */}
-        {step === 1 && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="mt-6 space-y-2">
-            {!isConnected && (
-              <p className="text-center text-[var(--color-warning)] text-[11px] font-mono tracking-widest opacity-80 flex items-center justify-center gap-2">
-                <Wallet size={13} />
-                CONNECT WALLET FIRST — REQUIRED FOR IDENTITY & DASHBOARD
-              </p>
-            )}
-            {isConnected && !form.deployMode && (
-              <p className="text-center text-[var(--color-text-dim)] text-[11px] font-mono tracking-widest">
-                SELECT A DEPLOYMENT TARGET TO CONTINUE
-              </p>
-            )}
-          </motion.div>
         )}
       </div>
     </div>
